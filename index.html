@@ -621,6 +621,12 @@ async function loadFromSupabase(){
     var {data:seancesData}=await sb.from('seances').select('*')
       .gte('date',todayStr2).lte('date',futurStr2).order('date');
     if(seancesData) SEANCES=seancesData;
+    // Charger les réservations de l'élève connecté
+    if(CURRENT_PROFILE&&CURRENT_PROFILE.role==='eleve'&&CURRENT_USER){
+      var {data:resaEleve}=await sb.from('reservations_seance').select('*')
+        .eq('eleve_id',CURRENT_USER.id).order('date');
+      if(resaEleve) RESERVATIONS_SEANCE=resaEleve;
+    }
     console.log('[RC] Données chargées depuis Supabase');
   }catch(e){
     console.error('[RC] Erreur chargement:',e);
@@ -2442,6 +2448,47 @@ function renderSCourses(s){
         h+='<div class="card" style="border-color:rgba(244,162,97,0.2);margin-top:.5rem"><div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem">En attente</div>'+
           pendingIds.map(function(cid){var co=getCourse(cid);return co?'<div style="font-size:.82rem;color:var(--muted2)">· '+co.nom+' <span class="pending-badge">En attente</span></div>':''}).join('')+'</div>';
       }
+    }
+
+    // ── Réservations séances uniques ──
+    var resasEleve=CURRENT_USER?RESERVATIONS_SEANCE.filter(function(r){return r.eleve_id===CURRENT_USER.id;}):[];
+    if(resasEleve.length){
+      var months2=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+      var weekDays2=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      resasEleve.forEach(function(r){
+        var co=getCourse(r.cours_id);
+        if(!co) return;
+        var prof=getProf(co.profId);
+        var d=new Date(r.date+'T12:00:00');
+        var dateStr=weekDays2[d.getDay()]+' '+d.getDate()+' '+months2[d.getMonth()];
+        var hFin='';
+        if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
+        var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
+        var isConfirme=r.statut==='confirme';
+        var isAttente=r.statut==='attente';
+        var borderCol=isConfirme?'rgba(39,174,96,0.25)':'rgba(244,162,97,0.25)';
+        var bgCol=isConfirme?'linear-gradient(135deg,rgba(39,174,96,0.12),rgba(39,174,96,0.04))':'linear-gradient(135deg,rgba(244,162,97,0.1),rgba(244,162,97,0.03))';
+        var dateColor=isConfirme?'#27AE60':'var(--gold)';
+        var badgeLabel='Cours à l\'unité · '+dateStr+(isConfirme?' · ✓ Confirmé':' · ⏳ En attente');
+        var badgeBg=isConfirme?'rgba(39,174,96,0.15)':'rgba(244,162,97,0.12)';
+        var badgeBorder=isConfirme?'rgba(39,174,96,0.3)':'rgba(244,162,97,0.3)';
+        var badgeColor=isConfirme?'#27AE60':'var(--gold)';
+        h+='<div style="background:'+bgCol+';border:1px solid '+borderCol+';border-radius:14px;padding:1rem 1.2rem;margin-bottom:.75rem">'+
+          '<div style="display:flex;align-items:center;gap:.9rem">'+
+            '<div style="text-align:center;min-width:52px">'+
+              '<div style="font-family:Bebas Neue,sans-serif;font-size:1.8rem;color:'+dateColor+';line-height:1">'+d.getDate()+'</div>'+
+              '<div style="font-size:.7rem;color:'+dateColor+';font-weight:600">'+months2[d.getMonth()].toUpperCase()+'</div>'+
+              '<div style="font-size:.65rem;color:var(--muted)">'+weekDays2[d.getDay()]+'</div>'+
+            '</div>'+
+            '<div style="width:1px;height:48px;background:'+borderCol+'"></div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:1rem;font-weight:700;color:var(--white)">'+co.nom+'</div>'+
+              '<div style="font-size:.78rem;color:var(--muted2);margin-top:.1rem">'+horaire+(prof?' · '+prof.prenom:'')+'</div>'+
+              '<div style="margin-top:.3rem"><span style="font-size:.65rem;background:'+badgeBg+';color:'+badgeColor+';padding:2px 7px;border-radius:3px;font-weight:600;border:1px solid '+badgeBorder+'">'+badgeLabel+'</span></div>'+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      });
     }
   } else {
     // ── Tous les cours ──

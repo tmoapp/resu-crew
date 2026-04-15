@@ -1454,16 +1454,26 @@ function closeStudentProfile(){document.getElementById('profile-ov').classList.r
 // ── FEED ──
 function getNextSession(cours){
   var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
-  var today=new Date();
+  var today=new Date(); today.setHours(0,0,0,0);
   var todayDay=today.getDay();
   var targetDay=days[cours.jour];
   if(targetDay===undefined) return null;
-  var diff=targetDay-todayDay;
-  if(diff<0||(diff===0&&cours.heure&&today.getHours()>=parseInt(cours.heure))) diff+=7;
-  var next=new Date(today);
-  next.setDate(today.getDate()+diff);
   var months=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
-  return{date:next.getDate()+' '+months[next.getMonth()],jour:cours.jour,diff:diff};
+  // Chercher les 8 prochaines dates en sautant les annulées
+  for(var w=0;w<8;w++){
+    var diff=targetDay-todayDay+(w*7);
+    if(diff<0) diff+=7;
+    if(diff===0&&cours.heure&&new Date().getHours()>=parseInt(cours.heure)) diff+=7;
+    var next=new Date(today);
+    next.setDate(today.getDate()+diff);
+    var ds=next.toISOString().split('T')[0];
+    // Vérifier si cette date est annulée
+    var seance=SEANCES.find(function(s){return s.cours_id===cours.id&&s.date===ds;});
+    if(seance&&seance.statut==='annule') continue; // sauter cette date
+    var realDiff=Math.round((next-today)/(1000*60*60*24));
+    return{date:next.getDate()+' '+months[next.getMonth()],jour:cours.jour,diff:realDiff,annule:false,ds:ds};
+  }
+  return null;
 }
 
 function openCoursDetail(courseId){
@@ -1892,6 +1902,8 @@ function showValidationError(msg){
 
 // ── TEACHER PAGES ──
 var T_COURSE_TAB='cours';
+var SEANCES=[]; // {id, cours_id, date, statut, note}
+var SELECTED_COURS_ID=null;
 function tPage(p){
   ['feed','courses','profs','students'].forEach(function(x){var b=document.getElementById('tn-'+x);if(b)b.className='nb'+(x===p?' on':'')});
   var el=document.getElementById('t-page');
@@ -1906,11 +1918,124 @@ function renderFeed(isProf){
   if(!POSTS.length)h+='<div class="empty">Aucune publication.</div>';
   return h;
 }
+
+// ── CALENDRIER SÉANCES ──
+async function loadSeances(){
+  if(!SUPABASE_READY){tPage('courses');return;}
+  // Générer les 8 prochaines semaines pour chaque cours
+  await generateSeances();
+  // Charger les séances existantes depuis Supabase
+  var today=new Date(); today.setHours(0,0,0,0);
+  var futur=new Date(today); futur.setDate(futur.getDate()+60);
+  var {data,error}=await sb.from('seances').select('*')
+    .gte('date',today.toISOString().split('T')[0])
+    .lte('date',futur.toISOString().split('T')[0])
+    .order('date');
+  if(data) SEANCES=data;
+  tPage('courses');
+}
+
+async function generateSeances(){
+  // Pour chaque cours, générer les 8 prochaines dates si elles n'existent pas
+  var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
+  var today=new Date(); today.setHours(0,0,0,0);
+  for(var ci=0;ci<COURSES.length;ci++){
+    var co=COURSES[ci];
+    var targetDay=days[co.jour];
+    if(targetDay===undefined) continue;
+    var dates=[];
+    var d=new Date(today);
+    var diff=targetDay-d.getDay();
+    if(diff<0) diff+=7;
+    if(diff===0 && co.heure && new Date().getHours()>=parseInt(co.heure)) diff=7;
+    d.setDate(d.getDate()+diff);
+    for(var w=0;w<8;w++){
+      dates.push(new Date(d));
+      d.setDate(d.getDate()+7);
+    }
+    // Insérer uniquement les dates manquantes
+    for(var di=0;di<dates.length;di++){
+      var ds=dates[di].toISOString().split('T')[0];
+      var exists=SEANCES.some(function(s){return s.cours_id===co.id&&s.date===ds;});
+      if(!exists){
+        await sb.from('seances').insert({cours_id:co.id,date:ds,statut:'actif'}).catch(function(){});
+      }
+    }
+  }
+}
+
+async function toggleSeance(id,currentStatut){
+  var newStatut=currentStatut==='actif'?'annule':'actif';
+  await sb.from('seances').update({statut:newStatut}).eq('id',id);
+  var s=SEANCES.find(function(x){return x.id===id;});
+  if(s) s.statut=newStatut;
+  tPage('courses');
+}
+
+async function addSeanceNote(id){
+  var note=prompt('Note pour cette séance (ex: "Annulé - vacances") :');
+  if(note===null) return;
+  await sb.from('seances').update({note:note}).eq('id',id);
+  var s=SEANCES.find(function(x){return x.id===id;});
+  if(s) s.note=note;
+  tPage('courses');
+}
+
+function renderTCalendrier(){
+  if(!COURSES.length) return '<div class="empty">Aucun cours créé.</div>';
+  var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
+  var months=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+  var weekDays=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  var h='<div class="sec-h"><h2>Calendrier des cours</h2></div>';
+  h+='<div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">Appuyez sur une date pour annuler/réactiver un cours. Appuyez sur ✎ pour ajouter une note.</div>';
+
+  COURSES.forEach(function(co){
+    var prof=getProf(co.profId);
+    h+='<div class="card" style="margin-bottom:1rem;padding:.9rem">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem">';
+    h+='<div><div style="font-size:.95rem;font-weight:700;color:var(--white)">'+co.nom+'</div>';
+    h+='<div style="font-size:.72rem;color:var(--muted2)">'+co.jour+' · '+co.heure.replace(':','h')+(prof?' · '+prof.prenom:'')+'</div></div>';
+    h+='</div>';
+
+    // Séances pour ce cours
+    var seancesCours=SEANCES.filter(function(s){return s.cours_id===co.id;});
+    seancesCours.sort(function(a,b){return a.date.localeCompare(b.date);});
+
+    if(!seancesCours.length){
+      h+='<div style="font-size:.78rem;color:var(--muted);font-style:italic">Chargement... (cliquez sur Calendrier)</div>';
+    } else {
+      h+='<div style="display:flex;flex-direction:column;gap:.4rem">';
+      seancesCours.forEach(function(s){
+        var d=new Date(s.date+'T12:00:00');
+        var dateStr=weekDays[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()];
+        var isAnnule=s.statut==='annule';
+        var isToday=s.date===new Date().toISOString().split('T')[0];
+        h+='<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border-radius:8px;background:'+(isAnnule?'rgba(220,50,50,0.08)':'rgba(255,255,255,0.03)')+';border:1px solid '+(isAnnule?'rgba(220,50,50,0.2)':isToday?'rgba(42,127,232,0.3)':'rgba(255,255,255,0.06)')+';">';
+        // Date
+        h+='<div style="flex:1;display:flex;align-items:center;gap:.6rem">';
+        h+='<div style="font-size:.85rem;font-weight:'+(isToday?'700':'400')+';color:'+(isAnnule?'#E05555':isToday?'var(--accent)':'var(--white)')+'">'+dateStr+'</div>';
+        if(isToday) h+='<span style="font-size:.6rem;background:rgba(42,127,232,0.2);color:var(--accent2);padding:2px 6px;border-radius:3px;font-weight:600">AUJOURD\'HUI</span>';
+        if(isAnnule) h+='<span style="font-size:.6rem;background:rgba(220,50,50,0.15);color:#E05555;padding:2px 6px;border-radius:3px;font-weight:600">ANNULÉ</span>';
+        if(s.note) h+='<span style="font-size:.7rem;color:var(--muted2);font-style:italic">'+s.note+'</span>';
+        h+='</div>';
+        // Actions
+        h+='<button data-sid="'+s.id+'" data-statut="'+s.statut+'" onclick="toggleSeance(this.dataset.sid,this.dataset.statut)" style="padding:.3rem .7rem;border-radius:5px;border:1px solid '+(isAnnule?'rgba(39,174,96,0.3)':'rgba(220,50,50,0.3)')+';background:'+(isAnnule?'rgba(39,174,96,0.1)':'rgba(220,50,50,0.1)')+';color:'+(isAnnule?'#27AE60':'#E05555')+';cursor:pointer;font-size:.72rem;font-weight:600;font-family:Outfit,sans-serif">'+(isAnnule?'Réactiver':'Annuler')+'</button>';
+        h+='<button data-sid="'+s.id+'" onclick="addSeanceNote(this.dataset.sid)" style="padding:.3rem .5rem;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--muted);cursor:pointer;font-size:.78rem;font-family:Outfit,sans-serif">✎</button>';
+        h+='</div>';
+      });
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+  return h;
+}
+
 function renderTCourses(){
-  var h='<div class="tab-row">'+
+  var h='<div class="tab-row" style="overflow-x:auto;flex-wrap:nowrap">'+
     '<button class="tab-btn'+(T_COURSE_TAB==='cours'?' on':'')+'" onclick="T_COURSE_TAB=\'cours\';tPage(\'courses\')">Cours</button>'+
     '<button class="tab-btn'+(T_COURSE_TAB==='packs'?' on':'')+'" onclick="T_COURSE_TAB=\'packs\';tPage(\'courses\')">Packs & Tarifs</button>'+
     '<button class="tab-btn'+(T_COURSE_TAB==='styles'?' on':'')+'" onclick="T_COURSE_TAB=\'styles\';tPage(\'courses\')">Styles</button>'+
+    '<button class="tab-btn'+(T_COURSE_TAB==='calendrier'?' on':'')+'" onclick="T_COURSE_TAB=\'calendrier\';loadSeances();tPage(\'courses\')">Calendrier</button>'+
   '</div>';
   if(T_COURSE_TAB==='cours'){
     var nivMap={'Débutant':'bg-green','Intermédiaire':'bg-gold','Avancé':'bg-blue','Tous niveaux':'bg-muted'};
@@ -1932,6 +2057,8 @@ function renderTCourses(){
       h+='<div class="card" style="display:flex;justify-content:space-between;align-items:center"><div><div class="card-title">'+pk.nom+'</div><div class="card-sub">'+(pk.type==='illimite'?'Illimité annuel':pk.seances+' séances')+'</div></div><div style="display:flex;align-items:center;gap:.7rem"><span style="font-size:1rem;font-weight:700;color:var(--gold)">'+pk.prix+' €</span><button class="btn-add" style="font-size:1.1rem;padding:.22rem .6rem" onclick="openMod(\'pack\','+i+')">✏</button><button style="padding:.22rem .6rem;font-size:1.1rem;border-radius:4px;border:1px solid rgba(220,50,50,0.25);background:rgba(220,50,50,0.08);color:#E05555;cursor:pointer;font-family:\'Outfit\',sans-serif" onclick="if(confirm(\'Supprimer ?\'))PACKS.splice('+i+',1),tPage(\'courses\')">✕</button></div></div>';
     });
     if(!PACKS.length)h+='<div class="empty">Aucun pack.</div>';
+  }else if(T_COURSE_TAB==='calendrier'){
+    h+=renderTCalendrier();
   }else if(T_COURSE_TAB==='styles'){
     h+='<div class="sec-h"><h2>Styles de danse</h2></div><div class="card">'+
       '<div style="font-size:1.05rem;color:var(--muted2);margin-bottom:.9rem;line-height:1.5">Ces styles seront disponibles lors de la création ou modification d\'un cours.</div>'+

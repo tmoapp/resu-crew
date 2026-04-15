@@ -612,6 +612,12 @@ async function loadFromSupabase(){
         });
       }
     }
+    // Charger les séances (pour élèves et profs)
+    var todayStr2=new Date().toISOString().split('T')[0];
+    var futurStr2=new Date(Date.now()+120*24*60*60*1000).toISOString().split('T')[0];
+    var {data:seancesData}=await sb.from('seances').select('*')
+      .gte('date',todayStr2).lte('date',futurStr2).order('date');
+    if(seancesData) SEANCES=seancesData;
     console.log('[RC] Données chargées depuis Supabase');
   }catch(e){
     console.error('[RC] Erreur chargement:',e);
@@ -1453,27 +1459,34 @@ function closeStudentProfile(){document.getElementById('profile-ov').classList.r
 
 // ── FEED ──
 function getNextSession(cours){
-  var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
   var today=new Date(); today.setHours(0,0,0,0);
-  var todayDay=today.getDay();
+  var todayStr=today.toISOString().split('T')[0];
+  var months=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+  var weekDays=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+
+  // Chercher dans les séances Supabase (dates réelles du prof)
+  var seancesCours=SEANCES.filter(function(s){
+    return s.cours_id===cours.id && s.date>=todayStr && s.statut!=='annule';
+  });
+  seancesCours.sort(function(a,b){return a.date.localeCompare(b.date);});
+
+  if(seancesCours.length>0){
+    var s=seancesCours[0];
+    var d=new Date(s.date+'T12:00:00');
+    var diff=Math.round((d-today)/(1000*60*60*24));
+    return{date:d.getDate()+' '+months[d.getMonth()],jour:weekDays[d.getDay()],diff:diff,ds:s.date};
+  }
+
+  // Fallback: calcul automatique si aucune séance planifiée
+  var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
   var targetDay=days[cours.jour];
   if(targetDay===undefined) return null;
-  var months=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
-  // Chercher les 8 prochaines dates en sautant les annulées
-  for(var w=0;w<8;w++){
-    var diff=targetDay-todayDay+(w*7);
-    if(diff<0) diff+=7;
-    if(diff===0&&cours.heure&&new Date().getHours()>=parseInt(cours.heure)) diff+=7;
-    var next=new Date(today);
-    next.setDate(today.getDate()+diff);
-    var ds=next.toISOString().split('T')[0];
-    // Vérifier si cette date est annulée
-    var seance=SEANCES.find(function(s){return s.cours_id===cours.id&&s.date===ds;});
-    if(seance&&seance.statut==='annule') continue; // sauter cette date
-    var realDiff=Math.round((next-today)/(1000*60*60*24));
-    return{date:next.getDate()+' '+months[next.getMonth()],jour:cours.jour,diff:realDiff,annule:false,ds:ds};
-  }
-  return null;
+  var diff2=targetDay-today.getDay();
+  if(diff2<0) diff2+=7;
+  if(diff2===0&&cours.heure&&new Date().getHours()>=parseInt(cours.heure)) diff2+=7;
+  var next=new Date(today);
+  next.setDate(today.getDate()+diff2);
+  return{date:next.getDate()+' '+months[next.getMonth()],jour:cours.jour,diff:diff2,ds:next.toISOString().split('T')[0]};
 }
 
 function openCoursDetail(courseId){
@@ -1922,57 +1935,42 @@ function renderFeed(isProf){
 // ── CALENDRIER SÉANCES ──
 async function loadSeances(){
   if(!SUPABASE_READY){tPage('courses');return;}
-  toast('Chargement du calendrier...','info');
   var today=new Date(); today.setHours(0,0,0,0);
-  var futur=new Date(today); futur.setDate(futur.getDate()+60);
-  // 1. Charger d'abord les séances existantes
+  var futur=new Date(today); futur.setDate(futur.getDate()+120);
   var {data}=await sb.from('seances').select('*')
     .gte('date',today.toISOString().split('T')[0])
     .lte('date',futur.toISOString().split('T')[0])
     .order('date');
   SEANCES=data||[];
-  // 2. Générer les dates manquantes
-  await generateSeances();
-  // 3. Recharger après génération
-  var {data:data2}=await sb.from('seances').select('*')
-    .gte('date',today.toISOString().split('T')[0])
-    .lte('date',futur.toISOString().split('T')[0])
-    .order('date');
-  SEANCES=data2||[];
   tPage('courses');
 }
 
-async function generateSeances(){
-  var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
-  var today=new Date(); today.setHours(0,0,0,0);
-  var toInsert=[];
-  for(var ci=0;ci<COURSES.length;ci++){
-    var co=COURSES[ci];
-    var targetDay=days[co.jour];
-    if(targetDay===undefined) continue;
-    // Trouver la prochaine occurrence du bon jour
-    var d=new Date(today);
-    var diff=targetDay-d.getDay();
-    if(diff<0) diff+=7;
-    if(diff===0&&co.heure&&new Date().getHours()>=parseInt(co.heure)) diff=7;
-    d.setDate(d.getDate()+diff);
-    // Générer 8 semaines consécutives
-    for(var w=0;w<8;w++){
-      var ds=d.toISOString().split('T')[0];
-      // Vérifier si cette date existe déjà dans SEANCES
-      var exists=SEANCES.some(function(s){return s.cours_id===co.id&&s.date===ds;});
-      if(!exists){
-        toInsert.push({cours_id:co.id,date:ds,statut:'actif'});
-      }
-      d.setDate(d.getDate()+7); // semaine suivante
-    }
-  }
-  // Insérer en batch si nécessaire
-  if(toInsert.length>0){
-    var {error}=await sb.from('seances').insert(toInsert);
-    if(error) console.warn('[RC] generateSeances error:',error.message);
-    else console.log('[RC] Séances générées:',toInsert.length);
-  }
+async function addSeanceManuelle(coursId){
+  // Ouvrir un sélecteur de date
+  var input=document.createElement('input');
+  input.type='date';
+  input.style.cssText='position:fixed;opacity:0;top:0;left:0';
+  var today=new Date().toISOString().split('T')[0];
+  input.min=today;
+  input.value=today;
+  document.body.appendChild(input);
+  input.focus();
+  input.click();
+  input.addEventListener('change',async function(){
+    var ds=input.value;
+    document.body.removeChild(input);
+    if(!ds) return;
+    // Vérifier si cette date existe déjà
+    var exists=SEANCES.some(function(s){return s.cours_id===coursId&&s.date===ds;});
+    if(exists){toast('Cette date existe déjà','err');return;}
+    var {error}=await sb.from('seances').insert({cours_id:coursId,date:ds,statut:'actif'});
+    if(error){toast('Erreur: '+error.message,'err');return;}
+    toast('Séance ajoutée ✓');
+    await loadSeances();
+  });
+  input.addEventListener('blur',function(){
+    setTimeout(function(){if(document.body.contains(input))document.body.removeChild(input);},300);
+  });
 }
 
 async function toggleSeance(id,currentStatut){
@@ -1992,46 +1990,61 @@ async function addSeanceNote(id){
   tPage('courses');
 }
 
+async function deleteSeance(id){
+  if(!confirm('Supprimer cette séance ?')) return;
+  var {error}=await sb.from('seances').delete().eq('id',id);
+  if(error){toast('Erreur: '+error.message,'err');return;}
+  SEANCES=SEANCES.filter(function(s){return s.id!==id;});
+  toast('Séance supprimée');
+  tPage('courses');
+}
+
 function renderTCalendrier(){
   if(!COURSES.length) return '<div class="empty">Aucun cours créé.</div>';
-  var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
   var months=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
   var weekDays=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  var today=new Date().toISOString().split('T')[0];
   var h='<div class="sec-h"><h2>Calendrier des cours</h2></div>';
-  h+='<div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">Appuyez sur une date pour annuler/réactiver un cours. Appuyez sur ✎ pour ajouter une note.</div>';
+  h+='<div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">Ajoutez les dates de vos cours. Annulez une séance en cas d’absence ou d’impérévu.</div>';
 
   COURSES.forEach(function(co){
     var prof=getProf(co.profId);
-    h+='<div class="card" style="margin-bottom:1rem;padding:.9rem">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem">';
-    h+='<div><div style="font-size:.95rem;font-weight:700;color:var(--white)">'+co.nom+'</div>';
-    h+='<div style="font-size:.72rem;color:var(--muted2)">'+co.jour+' · '+co.heure.replace(':','h')+(prof?' · '+prof.prenom:'')+'</div></div>';
-    h+='</div>';
-
-    // Séances pour ce cours
     var seancesCours=SEANCES.filter(function(s){return s.cours_id===co.id;});
     seancesCours.sort(function(a,b){return a.date.localeCompare(b.date);});
 
+    h+='<div class="card" style="margin-bottom:1rem;padding:.9rem">';
+    // Header cours
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem">';
+    h+='<div>';
+    h+='<div style="font-size:.95rem;font-weight:700;color:var(--white)">'+co.nom+'</div>';
+    h+='<div style="font-size:.72rem;color:var(--muted2)">'+co.jour+' · '+co.heure.replace(':','h')+(prof?' · '+prof.prenom:'')+'</div>';
+    h+='</div>';
+    h+='<button data-cid="'+co.id+'" onclick="addSeanceManuelle(this.dataset.cid)" style="display:flex;align-items:center;gap:.3rem;padding:.38rem .8rem;border-radius:5px;border:1px solid var(--accent);background:rgba(42,127,232,0.1);color:var(--accent);cursor:pointer;font-family:Outfit,sans-serif;font-size:.75rem;font-weight:600">+ Date</button>';
+    h+='</div>';
+
     if(!seancesCours.length){
-      h+='<div style="font-size:.78rem;color:var(--muted);font-style:italic">Chargement... (cliquez sur Calendrier)</div>';
+      h+='<div style="font-size:.78rem;color:var(--muted);font-style:italic;padding:.5rem 0">Aucune séance planifiée — ajoutez des dates avec le bouton ci-dessus.</div>';
     } else {
-      h+='<div style="display:flex;flex-direction:column;gap:.4rem">';
+      h+='<div style="display:flex;flex-direction:column;gap:.35rem">';
       seancesCours.forEach(function(s){
         var d=new Date(s.date+'T12:00:00');
-        var dateStr=weekDays[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()];
+        var dateStr=weekDays[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
         var isAnnule=s.statut==='annule';
-        var isToday=s.date===new Date().toISOString().split('T')[0];
-        h+='<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border-radius:8px;background:'+(isAnnule?'rgba(220,50,50,0.08)':'rgba(255,255,255,0.03)')+';border:1px solid '+(isAnnule?'rgba(220,50,50,0.2)':isToday?'rgba(42,127,232,0.3)':'rgba(255,255,255,0.06)')+';">';
-        // Date
-        h+='<div style="flex:1;display:flex;align-items:center;gap:.6rem">';
-        h+='<div style="font-size:.85rem;font-weight:'+(isToday?'700':'400')+';color:'+(isAnnule?'#E05555':isToday?'var(--accent)':'var(--white)')+'">'+dateStr+'</div>';
+        var isToday=s.date===today;
+        var isPast=s.date<today;
+        h+='<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;border-radius:8px;background:'+(isPast?'rgba(255,255,255,0.02)':isAnnule?'rgba(220,50,50,0.07)':'rgba(255,255,255,0.03)')+';border:1px solid '+(isPast?'rgba(255,255,255,0.04)':isAnnule?'rgba(220,50,50,0.18)':isToday?'rgba(42,127,232,0.3)':'rgba(255,255,255,0.07)')+';opacity:'+(isPast?'0.5':'1')+'">';
+        h+='<div style="flex:1;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">';
+        h+='<span style="font-size:.85rem;font-weight:'+(isToday?'700':'400')+';color:'+(isAnnule?'#E05555':isToday?'var(--accent)':isPast?'var(--muted)':'var(--white)')+'">'+dateStr+'</span>';
         if(isToday) h+='<span style="font-size:.6rem;background:rgba(42,127,232,0.2);color:var(--accent2);padding:2px 6px;border-radius:3px;font-weight:600">AUJOURD\'HUI</span>';
         if(isAnnule) h+='<span style="font-size:.6rem;background:rgba(220,50,50,0.15);color:#E05555;padding:2px 6px;border-radius:3px;font-weight:600">ANNULÉ</span>';
-        if(s.note) h+='<span style="font-size:.7rem;color:var(--muted2);font-style:italic">'+s.note+'</span>';
+        if(isPast&&!isAnnule) h+='<span style="font-size:.6rem;color:var(--muted);padding:2px 6px">passé</span>';
+        if(s.note) h+='<span style="font-size:.7rem;color:var(--muted2);font-style:italic">— '+s.note+'</span>';
         h+='</div>';
-        // Actions
-        h+='<button data-sid="'+s.id+'" data-statut="'+s.statut+'" onclick="toggleSeance(this.dataset.sid,this.dataset.statut)" style="padding:.3rem .7rem;border-radius:5px;border:1px solid '+(isAnnule?'rgba(39,174,96,0.3)':'rgba(220,50,50,0.3)')+';background:'+(isAnnule?'rgba(39,174,96,0.1)':'rgba(220,50,50,0.1)')+';color:'+(isAnnule?'#27AE60':'#E05555')+';cursor:pointer;font-size:.72rem;font-weight:600;font-family:Outfit,sans-serif">'+(isAnnule?'Réactiver':'Annuler')+'</button>';
-        h+='<button data-sid="'+s.id+'" onclick="addSeanceNote(this.dataset.sid)" style="padding:.3rem .5rem;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--muted);cursor:pointer;font-size:.78rem;font-family:Outfit,sans-serif">✎</button>';
+        if(!isPast){
+          h+='<button data-sid="'+s.id+'" data-statut="'+s.statut+'" onclick="toggleSeance(this.dataset.sid,this.dataset.statut)" style="flex-shrink:0;padding:.28rem .6rem;border-radius:5px;border:1px solid '+(isAnnule?'rgba(39,174,96,0.3)':'rgba(220,50,50,0.3)')+';background:'+(isAnnule?'rgba(39,174,96,0.08)':'rgba(220,50,50,0.08)')+';color:'+(isAnnule?'#27AE60':'#E05555')+';cursor:pointer;font-size:.7rem;font-weight:600;font-family:Outfit,sans-serif">'+(isAnnule?'Réactiver':'Annuler')+'</button>';
+          h+='<button data-sid="'+s.id+'" onclick="addSeanceNote(this.dataset.sid)" style="flex-shrink:0;padding:.28rem .45rem;border-radius:5px;border:1px solid rgba(255,255,255,0.07);background:transparent;color:var(--muted);cursor:pointer;font-size:.78rem;font-family:Outfit,sans-serif">✎</button>';
+          h+='<button data-sid="'+s.id+'" onclick="deleteSeance(this.dataset.sid)" style="flex-shrink:0;padding:.28rem .45rem;border-radius:5px;border:1px solid rgba(220,50,50,0.2);background:transparent;color:rgba(220,50,50,0.6);cursor:pointer;font-size:.78rem;font-family:Outfit,sans-serif">✕</button>';
+        }
         h+='</div>';
       });
       h+='</div>';
@@ -2040,6 +2053,7 @@ function renderTCalendrier(){
   });
   return h;
 }
+
 
 function renderTCourses(){
   var h='<div class="tab-row" style="overflow-x:auto;flex-wrap:nowrap">'+

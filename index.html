@@ -153,7 +153,7 @@ select.inp option{background:#0d1120}textarea.inp{resize:vertical;min-height:80p
 .prof-chip{display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(42,127,232,0.12);border:1px solid rgba(42,127,232,0.2);color:var(--accent3);font-size:1.1rem;margin:.15rem .1rem;font-weight:500}
 
 /* ── MODAL ── */
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:900;align-items:flex-end;justify-content:center}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:980;align-items:flex-end;justify-content:center}
 .overlay.open{display:flex}
 .modal{background:var(--bg3);border-radius:14px 14px 0 0;padding:1.5rem;width:100%;max-width:500px;border-top:1px solid rgba(42,127,232,0.2);max-height:90vh;overflow-y:auto;backdrop-filter:blur(20px)}
 .modal::-webkit-scrollbar{width:3px}.modal::-webkit-scrollbar-thumb{background:var(--accent);border-radius:2px}
@@ -1424,7 +1424,13 @@ function rejectIns(reqId){var i=INSCRIPTION_REQUESTS.findIndex(function(r){retur
 
 async function confirmResa(id){
   if(SUPABASE_READY){
-    await sb.from('reservations_seance').update({statut:'confirme'}).eq('id',id).catch(function(){});
+    var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+    var r=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?id=eq.'+id,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
+      body:JSON.stringify({statut:'confirme'})
+    });
+    if(!r.ok){var t=await r.text();toast('Erreur '+r.status+': '+t,'err');console.error('[RC] confirmResa:',r.status,t);return;}
   }
   RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
   toast('Réservation confirmée ✓');
@@ -1434,7 +1440,13 @@ async function confirmResa(id){
 async function rejectResa(id){
   if(!confirm('Annuler cette réservation ?')) return;
   if(SUPABASE_READY){
-    await sb.from('reservations_seance').update({statut:'annule'}).eq('id',id).catch(function(){});
+    var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+    var r=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?id=eq.'+id,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
+      body:JSON.stringify({statut:'annule'})
+    });
+    if(!r.ok){var t=await r.text();toast('Erreur '+r.status+': '+t,'err');console.error('[RC] rejectResa:',r.status,t);return;}
   }
   RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
   toast('Réservation annulée');

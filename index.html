@@ -2171,13 +2171,31 @@ function renderFeed(isProf){
 // ── CALENDRIER SÉANCES ──
 async function loadSeances(){
   if(!SUPABASE_READY){tPage('courses');return;}
+  toast('Chargement du calendrier...','info');
   var today=new Date(); today.setHours(0,0,0,0);
-  var futur=new Date(today); futur.setDate(futur.getDate()+120);
+  var todayStr=today.toISOString().split('T')[0];
+  var futur=new Date(today); futur.setDate(futur.getDate()+60);
+  var futurStr=futur.toISOString().split('T')[0];
+
+  // 1. Supprimer automatiquement les séances passées
+  var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+  await fetch(SUPABASE_URL+'/rest/v1/seances?date=lt.'+todayStr,{
+    method:'DELETE',
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}
+  }).catch(function(){});
+
+  // 2. Charger les séances existantes
   var {data}=await sb.from('seances').select('*')
-    .gte('date',today.toISOString().split('T')[0])
-    .lte('date',futur.toISOString().split('T')[0])
-    .order('date');
+    .gte('date',todayStr).lte('date',futurStr).order('date');
   SEANCES=data||[];
+
+  // 3. Générer les dates manquantes
+  await generateSeances();
+
+  // 4. Recharger
+  var {data:data2}=await sb.from('seances').select('*')
+    .gte('date',todayStr).lte('date',futurStr).order('date');
+  SEANCES=data2||[];
   tPage('courses');
 }
 
@@ -2416,7 +2434,8 @@ function renderTStudents(){
 // ── STUDENT PAGES ──
 function sPage(p){
   ['feed','courses','profs','qr','profile'].forEach(function(x){var b=document.getElementById('sn-'+x);if(b)b.className='nb'+(x===p?' on':'')});
-  var el=document.getElementById('s-page');var s=STUDENTS[LOGGED_STUDENT];
+  var el=document.getElementById('s-page');
+  var s=CURRENT_PROFILE||STUDENTS[LOGGED_STUDENT]||{};
   if(p==='feed')el.innerHTML=renderFeed(false);
   else if(p==='courses'){
     // Rafraîchir les inscriptions depuis Supabase avant d'afficher
@@ -2472,11 +2491,12 @@ function renderSCourses(s){
     '<button style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='tous'?activeSt:inactiveSt)+'" onclick="S_COURS_TAB=\'tous\';sPage(\'courses\')">Tous les cours</button>'+
   '</div>';
 
+  var myInscriptions=(s&&s.inscriptions&&s.inscriptions.length)?s.inscriptions:[];
   if(S_COURS_TAB==='mes_cours'){
-    if(!s.inscriptions.length){
+    if(!myInscriptions.length){
       h+='<div class="empty">Aucune inscription.<br>Consultez "Tous les cours".</div>';
     } else {
-      s.inscriptions.forEach(function(ins){
+      myInscriptions.forEach(function(ins){
         var co=getCourse(ins.courseId);
         if(!co||!co.nom) return;
         var prof=getProf(co.profId);
@@ -2510,7 +2530,8 @@ function renderSCourses(s){
     }
 
     // ── Réservations séances uniques ──
-    var resasEleve=CURRENT_USER?RESERVATIONS_SEANCE.filter(function(r){return r.eleve_id===CURRENT_USER.id&&r.statut!=='annule';}):[];
+    var myId=CURRENT_USER?CURRENT_USER.id:(s?s.id:null);
+    var resasEleve=myId?RESERVATIONS_SEANCE.filter(function(r){return r.eleve_id===myId&&r.statut!=='annule';}):[];
     if(resasEleve.length){
       var months2=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
       var weekDays2=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];

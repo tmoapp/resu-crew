@@ -157,7 +157,7 @@ select.inp option{background:#0d1120}textarea.inp{resize:vertical;min-height:80p
 .overlay.open{display:flex}
 .modal{background:var(--bg3);border-radius:14px 14px 0 0;padding:1.5rem;width:100%;max-width:500px;border-top:1px solid rgba(42,127,232,0.2);max-height:90vh;overflow-y:auto;backdrop-filter:blur(20px)}
 .modal::-webkit-scrollbar{width:3px}.modal::-webkit-scrollbar-thumb{background:var(--accent);border-radius:2px}
-.modal-title{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;letter-spacing:.06em;color:var(--white);margin-bottom:1.2rem}
+.modal-title{font-family:Bebas Neue,sans-serif;font-size:1.6rem;letter-spacing:.06em;color:var(--white);margin-bottom:1.2rem}
 .modal-actions{display:flex;gap:.7rem;margin-top:1.2rem}.modal-actions .btn-primary{margin:0}
 .btn-cancel{flex:1;padding:.75rem;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-family:'Outfit',sans-serif;font-size:1rem}
 .row2{display:flex;gap:.7rem}.row2>div{flex:1}
@@ -583,7 +583,7 @@ async function loadFromSupabase(){
       sb.from('posts').select('*').order('created_at',{ascending:false}).limit(30),
     ]);
     if(profs.data) PROFS=profs.data.map(function(p){return{id:p.id,prenom:p.prenom,nom:p.nom,photo:p.photo_url,styles:p.styles||[],desc:p.description||''};});
-    if(cours.data) COURSES=cours.data.map(function(c){return{id:c.id,nom:c.nom,style:c.style,profId:c.prof_id,jour:c.jour,heure:c.heure?c.heure.substring(0,5):c.heure,duree:c.duree_min,places:c.places_max,inscrits:0,niveau:c.niveau,packs:c.packs_ids||[]};});
+    if(cours.data) COURSES=cours.data.map(function(c){return{id:c.id,nom:c.nom,style:c.style,profId:c.prof_id,jour:c.jour,heure:c.heure?c.heure.substring(0,5):c.heure,duree:c.duree_min,places:c.places_max,inscrits:0,niveau:c.niveau,packs:c.packs_ids||[],tarif_seance:c.tarif_seance||null};});
     if(packs.data) PACKS=packs.data.map(function(p){return{id:p.id,nom:p.nom,type:p.type,seances:p.nb_seances,prix:parseFloat(p.prix)};});
     if(styles.data) DANCE_STYLES=styles.data.map(function(s){return s.nom;});
     if(posts.data) POSTS=posts.data.map(function(p){
@@ -868,6 +868,7 @@ function openMod(type,idx){
       '<div class="row2"><div class="field-row"><label>Durée (min)</label><input class="inp" id="f-d" type="number" value="'+(c?c.duree:90)+'" style="margin:0"/></div><div class="field-row"><label>Places max</label><input class="inp" id="f-p" type="number" value="'+(c?c.places:12)+'" style="margin:0"/></div></div>'+
       '<div class="field-row"><label>Niveau</label><select class="inp" id="f-niv">'+['Tous niveaux','Débutant','Intermédiaire','Avancé'].map(function(n){return'<option'+(c&&c.niveau===n?' selected':'')+'>'+n+'</option>'}).join('')+'</select></div>'+
       '<div class="field-row"><label>Packs disponibles</label>'+packsHtml+'</div>'+
+      '<div class="field-row"><label>Tarif à la séance (€) <span style="font-size:.65rem;color:var(--muted)">optionnel — laisser vide si non disponible</span></label><input class="inp" id="f-tarif-seance" type="number" step="0.5" min="0" placeholder="ex: 15" value="'+(c&&c.tarif_seance?c.tarif_seance:'')+'"/></div>'+
       '<div class="modal-actions"><button class="btn-primary" style="flex:1" onclick="saveCourse()">'+(c?'Enregistrer':'Créer')+'</button><button class="btn-cancel" onclick="closeMod()">Annuler</button></div>';
 
   }else if(type==='pack'){
@@ -1032,8 +1033,8 @@ async function saveCourse(){
   var nom=document.getElementById('f-nom').value.trim();if(!nom){toast('Nom requis','err');return}
   var selPacks=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
   var profId=document.getElementById('f-prof').value||null;
-  var row={nom:nom,style:document.getElementById('f-style').value,prof_id:profId||null,jour:document.getElementById('f-jour').value,heure:document.getElementById('f-h').value,duree_min:parseInt(document.getElementById('f-d').value)||90,places_max:parseInt(document.getElementById('f-p').value)||12,niveau:document.getElementById('f-niv').value,packs_ids:selPacks};
-  var local={id:EDIT_IDX>=0?COURSES[EDIT_IDX].id:uid(),nom:row.nom,style:row.style,profId:profId,jour:row.jour,heure:row.heure,duree:row.duree_min,places:row.places_max,inscrits:EDIT_IDX>=0?COURSES[EDIT_IDX].inscrits:0,niveau:row.niveau,packs:selPacks};
+  var row={nom:nom,style:document.getElementById('f-style').value,prof_id:profId||null,jour:document.getElementById('f-jour').value,heure:document.getElementById('f-h').value,duree_min:parseInt(document.getElementById('f-d').value)||90,places_max:parseInt(document.getElementById('f-p').value)||12,niveau:document.getElementById('f-niv').value,packs_ids:selPacks,tarif_seance:(document.getElementById('f-tarif-seance')&&document.getElementById('f-tarif-seance').value?parseFloat(document.getElementById('f-tarif-seance').value):null)};
+  var local={id:EDIT_IDX>=0?COURSES[EDIT_IDX].id:uid(),nom:row.nom,style:row.style,profId:profId,jour:row.jour,heure:row.heure,duree:row.duree_min,places:row.places_max,inscrits:EDIT_IDX>=0?COURSES[EDIT_IDX].inscrits:0,niveau:row.niveau,packs:selPacks,tarif_seance:row.tarif_seance};
   if(SUPABASE_READY){
     if(EDIT_IDX>=0){
       var res=await sbUpdate('cours',COURSES[EDIT_IDX].id,row);
@@ -1498,21 +1499,48 @@ function openCoursDetail(courseId){
   var prof=getProf(co.profId);
   var next=getNextSession(co);
   var dispo=co.places-(co.inscrits||0);
+  var alreadyIn=false;
+  var hasPending=false;
+  if(CURRENT_USER&&ROLE==='eleve'){
+    var mySelf=STUDENTS.find(function(st){return st.id===CURRENT_USER.id;});
+    if(mySelf) alreadyIn=(mySelf.inscriptions||[]).some(function(ins){return ins.courseId===co.id;});
+    hasPending=INSCRIPTION_REQUESTS.some(function(r){return r.studentId===CURRENT_USER.id&&r.courseId===co.id;});
+  }
   var nivMap={'Débutant':'bg-green','Intermédiaire':'bg-gold','Avancé':'bg-blue','Tous niveaux':'bg-muted'};
   var packs=(co.packs||[]).map(function(pid){var p=getPack(pid);return p?p:null;}).filter(Boolean);
+  // Heure fin
+  var hFin='';
+  if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
+  var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
+
+  // Build inscription buttons
+  var inscBtns='';
+  if(ROLE==='eleve'){
+    if(alreadyIn){
+      inscBtns='<div style="margin-top:.8rem;padding:.75rem;background:rgba(42,127,232,0.08);border:1px solid rgba(42,127,232,0.2);border-radius:8px;text-align:center;font-size:.85rem;color:var(--accent2)">\u2713 Vous \u00eates inscrit \u00e0 ce cours</div>';
+    } else if(hasPending){
+      inscBtns='<div style="margin-top:.8rem;padding:.75rem;background:rgba(244,162,97,0.08);border:1px solid rgba(244,162,97,0.2);border-radius:8px;text-align:center;font-size:.85rem;color:var(--gold)">\u23f3 Demande en attente de validation</div>';
+    } else if(dispo===0){
+      inscBtns='<div style="margin-top:.8rem;padding:.75rem;background:rgba(220,50,50,0.08);border:1px solid rgba(220,50,50,0.2);border-radius:8px;text-align:center;font-size:.85rem;color:#E05555">Ce cours est complet</div>';
+    } else {
+      inscBtns='<div style="margin-top:.8rem;display:flex;flex-direction:column;gap:.6rem">';
+      if(packs.length) inscBtns+='<button class="btn-primary" style="margin:0" onclick="openInscriptionModal(\'pack\')">S\'inscrire au cours (packs)</button>';
+      if(co.tarif_seance) inscBtns+='<button class="btn-primary" style="margin:0;background:rgba(42,127,232,0.15);border:1px solid rgba(42,127,232,0.4);color:var(--accent2)" onclick="openInscriptionModal(\'seance\')">R\u00e9server une s\u00e9ance \u00b7 '+co.tarif_seance+' \u20ac</button>';
+      inscBtns+='</div>';
+    }
+  }
+
   inner.innerHTML=
     '<div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.1rem;border-bottom:1px solid var(--border)">'+
-      '<div style="font-family:Bebas Neue,sans-serif;font-size:1.5rem;letter-spacing:.06em;color:var(--white)">Détail du cours</div>'+
+      '<div style="font-family:Bebas Neue,sans-serif;font-size:1.5rem;letter-spacing:.06em;color:var(--white)">D\u00e9tail du cours</div>'+
       '<button onclick="closeCoursDetail()" style="background:none;border:none;color:var(--muted2);font-size:2rem;cursor:pointer;padding:.2rem .6rem;line-height:1">&times;</button>'+
     '</div>'+
-    // Prochain cours - hero
     '<div style="background:linear-gradient(135deg,rgba(42,127,232,0.15),rgba(42,127,232,0.05));border-bottom:1px solid rgba(42,127,232,0.15);padding:1.4rem 1.1rem">'+
       '<div style="font-size:1.3rem;font-weight:700;color:var(--white);margin-bottom:.3rem">'+co.nom+'</div>'+
       '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.8rem">'+
         '<span class="badge '+(nivMap[co.niveau]||'bg-gold')+'">'+co.niveau+'</span>'+
-        (prof?'<span style="font-size:.95rem;color:var(--muted2)">· '+prof.prenom+' '+prof.nom+'</span>':'')+
+        (prof?'<span style="font-size:.95rem;color:var(--muted2)">\u00b7 '+prof.prenom+' '+prof.nom+'</span>':'')+
       '</div>'+
-      // Prochain cours highlight
       (next?
         '<div style="background:rgba(42,127,232,0.12);border:1px solid rgba(42,127,232,0.25);border-radius:10px;padding:.9rem 1rem;display:flex;align-items:center;gap:1rem">'+
           '<div style="text-align:center;min-width:48px">'+
@@ -1521,50 +1549,155 @@ function openCoursDetail(courseId){
           '</div>'+
           '<div style="width:1px;height:40px;background:var(--border)"></div>'+
           '<div>'+
-            '<div style="font-size:1rem;font-weight:600;color:var(--white)">'+co.heure.replace(':','h')+'</div>'+
-            '<div style="font-size:.9rem;color:var(--muted2)">'+co.duree+' min'+(next.diff===0?' · Aujourd\'hui':next.diff===1?' · Demain':' · Dans '+next.diff+' jours')+'</div>'+
+            '<div style="font-size:1rem;font-weight:600;color:var(--white)">'+horaire+'</div>'+
+            '<div style="font-size:.9rem;color:var(--muted2)">'+co.duree+' min'+(next.diff===0?' \u00b7 Aujourd\'hui':next.diff===1?' \u00b7 Demain':' \u00b7 Dans '+next.diff+' jours')+'</div>'+
           '</div>'+
           '<div style="margin-left:auto;text-align:right">'+
             '<div style="font-size:1rem;font-weight:600;color:'+(dispo===0?'#E05555':'#27AE60')+'">'+dispo+'</div>'+
             '<div style="font-size:.8rem;color:var(--muted)">places</div>'+
           '</div>'+
         '</div>'
-      :'<div style="font-size:.95rem;color:var(--muted)">Aucun créneau trouvé</div>')+
+      :'<div style="font-size:.95rem;color:var(--muted)">Aucun cr\u00e9neau trouv\u00e9</div>')+
     '</div>'+
-    // Infos
     '<div style="padding:1.1rem">'+
       '<div style="font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.8rem">Infos</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:1.1rem">'+
         '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Jour</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem">'+co.jour+'</div></div>'+
-        '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Heure</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem">'+co.heure.replace(':','h')+'</div></div>'+
-        '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Durée</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem">'+co.duree+' min</div></div>'+
+        '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Heure</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem">'+horaire+'</div></div>'+
+        '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Dur\u00e9e</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem">'+co.duree+' min</div></div>'+
         '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Places</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem;color:'+(dispo===0?'#E05555':'#27AE60')+'">'+dispo+'/'+co.places+'</div></div>'+
       '</div>'+
-      // Packs
       (packs.length?
         '<div style="font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem">Tarifs</div>'+
         packs.map(function(pk){
           return'<div style="display:flex;justify-content:space-between;align-items:center;padding:.75rem .9rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.5rem">'+
-            '<div><div style="font-size:1rem;font-weight:500">'+pk.nom+'</div><div style="font-size:.85rem;color:var(--muted2)">'+(pk.type==='illimite'?'Accès illimité 1 an':pk.seances+' séances')+'</div></div>'+
-            '<div style="font-size:1.1rem;font-weight:700;color:var(--gold)">'+pk.prix+' €</div>'+
+            '<div><div style="font-size:1rem;font-weight:500">'+pk.nom+'</div><div style="font-size:.85rem;color:var(--muted2)">'+(pk.type==='illimite'?'Acc\u00e8s illimit\u00e9 1 an':pk.seances+' s\u00e9ances')+'</div></div>'+
+            '<div style="font-size:1.1rem;font-weight:700;color:var(--gold)">'+pk.prix+' \u20ac</div>'+
           '</div>';
         }).join('')
       :'')+
-      // Bouton inscription si élève et dispo
-      (ROLE==='eleve'&&dispo>0?
-        '<button class="btn-primary" style="margin-top:.8rem" onclick="handleInscriptionFromCours()">S\'inscrire à ce cours</button>'
-      :'')+
+      (co.tarif_seance?'<div style="display:flex;justify-content:space-between;align-items:center;padding:.75rem .9rem;border:1px solid rgba(42,127,232,0.2);border-radius:8px;margin-bottom:.5rem;background:rgba(42,127,232,0.05)"><div style="font-size:1rem;font-weight:500">S\u00e9ance unique</div><div style="font-size:1.1rem;font-weight:700;color:var(--accent2)">'+co.tarif_seance+' \u20ac</div></div>':'')+
+      inscBtns+
     '</div>';
+
+  CURRENT_COURS_DETAIL_ID=courseId;
+  CURRENT_COURS_DETAIL=co;
   ov.style.display='flex';
   document.body.style.overflow='hidden';
 }
 
 var CURRENT_COURS_DETAIL_ID=null;
+var CURRENT_COURS_DETAIL=null;
+
 function closeCoursDetail(){
   var ov=document.getElementById('cours-detail-ov');
   if(ov) ov.style.display='none';
   document.body.style.overflow='';
 }
+
+function openInscriptionModal(type){
+  var co=CURRENT_COURS_DETAIL;
+  if(!co) return;
+  var packs=(co.packs||[]).map(function(pid){return getPack(pid);}).filter(Boolean);
+  var T=document.getElementById('mod-title');
+  var B=document.getElementById('mod-body');
+  document.getElementById('mod-ov').classList.add('open');
+  if(type==='pack'){
+    T.textContent='S\'inscrire au cours';
+    var packsHtml=packs.map(function(pk,i){
+      return'<div class="pack-option'+(i===0?' selected':'')+'" onclick="selPack(this,\''+pk.id+'\')" data-pack="'+pk.id+'">'+
+        '<div><div style="font-size:.9rem;font-weight:600">'+pk.nom+'</div>'+
+        '<div style="font-size:.72rem;color:var(--muted2);margin-top:.1rem">'+(pk.type==='illimite'?'Acc\u00e8s illimit\u00e9 1 an':pk.seances+' s\u00e9ances')+'</div></div>'+
+        '<div style="font-size:1rem;font-weight:700;color:var(--gold)">'+pk.prix+' \u20ac</div>'+
+      '</div>';
+    }).join('');
+    B.innerHTML='<div style="font-size:.9rem;font-weight:600;color:var(--white);margin-bottom:.3rem">'+co.nom+'</div>'+
+      '<div style="font-size:.78rem;color:var(--muted2);margin-bottom:1rem">'+co.jour+' \u00b7 '+co.heure.replace(':','h')+'</div>'+
+      '<div class="field-row"><label>Choisissez un pack</label></div>'+
+      packsHtml+
+      '<div class="field-row" style="margin-top:.5rem"><label>Message (optionnel)</label><textarea class="inp" id="ins-msg" placeholder="Une question ?"></textarea></div>'+
+      '<div class="notice" style="margin-top:.5rem">Votre demande sera transmise au professeur.</div>'+
+      '<div class="modal-actions"><button class="btn-primary" style="flex:1" onclick="submitInscription(\'pack\')">Envoyer la demande</button><button class="btn-cancel" onclick="closeMod()">Annuler</button></div>';
+  } else if(type==='seance'){
+    T.textContent='R\u00e9server une s\u00e9ance';
+    var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
+    var months=['jan','f\u00e9v','mar','avr','mai','jun','jul','ao\u00fb','sep','oct','nov','d\u00e9c'];
+    var weekDays=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    var seancesCo=SEANCES.filter(function(s){return s.cours_id===co.id&&s.statut==='actif';}).slice(0,6);
+    if(!seancesCo.length){
+      var today=new Date(); today.setHours(0,0,0,0);
+      var targetDay=days[co.jour];
+      if(targetDay!==undefined){
+        var d=new Date(today);
+        var diff=targetDay-d.getDay();
+        if(diff<0) diff+=7;
+        if(diff===0&&co.heure&&new Date().getHours()>=parseInt(co.heure)) diff=7;
+        d.setDate(d.getDate()+diff);
+        for(var w=0;w<6;w++){
+          seancesCo.push({id:'fake-'+w,date:d.toISOString().split('T')[0],statut:'actif'});
+          d.setDate(d.getDate()+7);
+        }
+      }
+    }
+    var datesHtml=seancesCo.map(function(s,i){
+      var dd=new Date(s.date+'T12:00:00');
+      var dateStr=weekDays[dd.getDay()]+' '+dd.getDate()+' '+months[dd.getMonth()];
+      return'<div class="pack-option'+(i===0?' selected':'')+'" onclick="selPack(this,\''+s.id+'\')" data-pack="'+s.id+'" data-date="'+s.date+'">'+
+        '<div style="font-size:.9rem;font-weight:600">'+dateStr+'</div>'+
+        '<div style="font-size:.72rem;color:var(--accent2);font-weight:600">'+co.tarif_seance+' \u20ac</div>'+
+      '</div>';
+    }).join('');
+    B.innerHTML='<div style="font-size:.9rem;font-weight:600;color:var(--white);margin-bottom:.3rem">'+co.nom+'</div>'+
+      '<div style="font-size:.78rem;color:var(--muted2);margin-bottom:1rem">'+co.heure.replace(':','h')+' \u00b7 '+co.tarif_seance+' \u20ac / s\u00e9ance</div>'+
+      '<div class="field-row"><label>Choisissez une date</label></div>'+
+      datesHtml+
+      '<div class="modal-actions"><button class="btn-primary" style="flex:1" onclick="submitInscription(\'seance\')">R\u00e9server</button><button class="btn-cancel" onclick="closeMod()">Annuler</button></div>';
+  }
+}
+
+
+async function submitInscription(type){
+  var sp=document.querySelector('.pack-option.selected');
+  if(!sp){toast('Choisissez une option','err');return;}
+  var co=CURRENT_COURS_DETAIL;
+  if(!co||!CURRENT_USER) return;
+  var s=STUDENTS.find(function(st){return st.id===CURRENT_USER.id;})||{id:CURRENT_USER.id};
+
+  if(type==='pack'){
+    var packId=sp.dataset.pack;
+    var msg=document.getElementById('ins-msg');
+    if(SUPABASE_READY){
+      var {error}=await sb.from('demandes_inscription').insert({
+        eleve_id:CURRENT_USER.id,cours_id:co.id,pack_id:packId,
+        statut:'attente',message:msg?msg.value:''
+      });
+      if(error){toast('Erreur: '+error.message,'err');return;}
+    }
+    INSCRIPTION_REQUESTS.push({id:uid(),studentId:CURRENT_USER.id,courseId:co.id,packId:packId,date:new Date().toLocaleDateString('fr'),msg:msg?msg.value:''});
+    closeMod();
+    closeCoursDetail();
+    S_COURS_TAB='mes_cours';
+    sPage('courses');
+    toast('Demande envoyée ! Le prof va valider.','info');
+
+  } else if(type==='seance'){
+    var seanceId=sp.dataset.pack;
+    var dateVal=sp.dataset.date;
+    var montant=co.tarif_seance||0;
+    if(SUPABASE_READY){
+      var {error:e2}=await sb.from('reservations_seance').insert({
+        eleve_id:CURRENT_USER.id,cours_id:co.id,
+        seance_id:seanceId.startsWith('fake')?null:seanceId,
+        date:dateVal,montant:montant,statut:'attente'
+      });
+      if(e2){toast('Erreur: '+e2.message,'err');return;}
+    }
+    closeMod();
+    closeCoursDetail();
+    toast('Séance réservée ! En attente de confirmation.','info');
+  }
+}
+
 
 function handleInscriptionFromCours(){
   closeCoursDetail();
@@ -1915,6 +2048,7 @@ function showValidationError(msg){
 
 // ── TEACHER PAGES ──
 var T_COURSE_TAB='cours';
+var S_COURS_TAB='mes_cours'; // 'mes_cours' | 'tous'
 var SEANCES=[]; // {id, cours_id, date, statut, note}
 var SELECTED_COURS_ID=null;
 function tPage(p){
@@ -2202,80 +2336,95 @@ function renderSProfs(){
   return h;
 }
 function renderSCourses(s){
-  var tr=s.inscriptions.reduce(function(a,ins){return ins.type==='illimite'?a:a+(ins.restant||0)},0);
   var pendingIds=INSCRIPTION_REQUESTS.filter(function(r){return r.studentId===s.id}).map(function(r){return r.courseId});
-  // Trouver tous les prochains cours (un par inscription, triés par date)
-  var nextSessions=[];
-  s.inscriptions.forEach(function(ins){
-    var co=getCourse(ins.courseId);
-    if(!co||!co.nom)return;
-    var n=getNextSession(co);
-    if(!n)return;
-    nextSessions.push({co:co,n:n,ins:ins});
-  });
-  nextSessions.sort(function(a,b){return a.n.diff-b.n.diff;});
-  var nextBanner='';
-  if(nextSessions.length>0){
-    nextBanner='<div style="margin-bottom:1rem">';
-    if(nextSessions.length>1){
-      nextBanner+='<div style="font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Prochains cours</div>';
+  var nivMap={'Débutant':'bg-green','Intermédiaire':'bg-gold','Avancé':'bg-blue','Tous niveaux':'bg-muted'};
+  var activeSt='background:var(--accent);color:white;border:none;';
+  var inactiveSt='background:transparent;color:var(--muted);border:none;';
+
+  // ── Toggle ──
+  var h='<div style="display:flex;gap:4px;background:rgba(0,0,0,0.3);border-radius:8px;padding:4px;border:1px solid var(--border);margin-bottom:1rem">'+
+    '<button style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+( S_COURS_TAB==='mes_cours'?activeSt:inactiveSt)+'" onclick="S_COURS_TAB=\'mes_cours\';sPage(\'courses\')">Mes cours</button>'+
+    '<button style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='tous'?activeSt:inactiveSt)+'" onclick="S_COURS_TAB=\'tous\';sPage(\'courses\')">Tous les cours</button>'+
+  '</div>';
+
+  if(S_COURS_TAB==='mes_cours'){
+    if(!s.inscriptions.length){
+      h+='<div class="empty">Aucune inscription.<br>Consultez "Tous les cours".</div>';
     } else {
-      nextBanner+='<div style="font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Prochain cours</div>';
-    }
-    nextSessions.forEach(function(item){
-      var prof2=getProf(item.co.profId);
-      var diffLabel=item.n.diff===0?'Aujourd\'hui !':item.n.diff===1?'Demain':'Dans '+item.n.diff+' jours';
-      var seancesLabel='';
-      if(item.ins.type==='illimite'){
-        seancesLabel='<span style="color:var(--muted2);font-size:.75rem"> · Illimité</span>';
-      } else if(item.ins.restant!==undefined){
-        seancesLabel='<span style="color:'+(item.ins.restant===0?'#E05555':'var(--gold)')+';font-size:.75rem"> · '+item.ins.restant+' séance'+(item.ins.restant>1?'s':'')+' restante'+(item.ins.restant>1?'s':'')+'</span>';
+      s.inscriptions.forEach(function(ins){
+        var co=getCourse(ins.courseId);
+        if(!co||!co.nom) return;
+        var prof=getProf(co.profId);
+        var next=getNextSession(co);
+        var hFin='';
+        if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
+        var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
+        var diffLabel=next?(next.diff===0?'Aujourd\'hui':next.diff===1?'Demain':'Dans '+next.diff+' jours'):'—';
+        var seancesInfo='';
+        if(ins.type==='illimite') seancesInfo='Illimité';
+        else if(ins.restant!==undefined) seancesInfo=ins.restant+' séance'+(ins.restant>1?'s':'')+' restante'+(ins.restant>1?'s':'');
+        h+='<div data-cid="'+co.id+'" onclick="openCoursDetail(this.dataset.cid)" style="cursor:pointer;background:linear-gradient(135deg,rgba(42,127,232,0.15),rgba(42,127,232,0.05));border:1px solid rgba(42,127,232,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:.75rem">'+
+          '<div style="display:flex;align-items:center;gap:.9rem">'+
+            '<div style="text-align:center;min-width:52px">'+
+              (next?'<div style="font-family:Bebas Neue,sans-serif;font-size:2rem;color:var(--accent);line-height:1">'+next.date+'</div><div style="font-size:.7rem;color:var(--muted)">'+next.jour+'</div>':'<div style="font-size:.7rem;color:var(--muted)">—</div>')+
+            '</div>'+
+            '<div style="width:1px;height:44px;background:rgba(42,127,232,0.2)"></div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:1rem;font-weight:700;color:var(--white)">'+co.nom+'</div>'+
+              '<div style="font-size:.78rem;color:var(--muted2);margin-top:.1rem">'+horaire+(prof?' · '+prof.prenom:'')+(seancesInfo?' · <span style="color:'+(ins.restant===0?'#E05555':'var(--gold)')+'">'+seancesInfo+'</span>':'')+' </div>'+
+              '<div style="font-size:.8rem;color:var(--accent2);margin-top:.25rem;font-weight:600">'+diffLabel+'</div>'+
+            '</div>'+
+            '<div style="color:var(--muted2);font-size:1.3rem">›</div>'+
+          '</div>'+
+        '</div>';
+      });
+      if(pendingIds.length){
+        h+='<div class="card" style="border-color:rgba(244,162,97,0.2);margin-top:.5rem"><div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem">En attente</div>'+
+          pendingIds.map(function(cid){var co=getCourse(cid);return co?'<div style="font-size:.82rem;color:var(--muted2)">· '+co.nom+' <span class="pending-badge">En attente</span></div>':''}).join('')+'</div>';
       }
-      nextBanner+='<div style="background:linear-gradient(135deg,rgba(42,127,232,0.15),rgba(42,127,232,0.05));border:1px solid rgba(42,127,232,0.18);border-radius:14px;padding:1rem 1.2rem;margin-bottom:.6rem">'+
-        '<div style="display:flex;align-items:center;gap:.9rem">'+
-          '<div style="text-align:center;min-width:48px">'+
-            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:2rem;color:var(--accent);line-height:1">'+item.n.date+'</div>'+
-            '<div style="font-size:.72rem;color:var(--muted)">'+item.n.jour+'</div>'+
-          '</div>'+
-          '<div style="width:1px;height:44px;background:rgba(42,127,232,0.2)"></div>'+
-          '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:.95rem;font-weight:700;color:var(--white)">'+item.co.nom+'</div>'+
-            '<div style="font-size:.78rem;color:var(--muted2);margin-top:.15rem">'+item.co.heure.replace(':','h')+(prof2?' · '+prof2.prenom:'')+seancesLabel+'</div>'+
-            '<div style="font-size:.8rem;color:var(--accent2);margin-top:.2rem;font-weight:500">'+diffLabel+'</div>'+
-          '</div>'+
-        '</div>'+
-      '</div>';
-    });
-    nextBanner+='</div>';
-  }
-  var h=nextBanner+'<div class="stat-grid"><div class="stat-box"><div class="stat-n">'+s.inscriptions.length+'</div><div class="stat-l">Cours inscrits</div></div><div class="stat-box"><div class="stat-n" style="color:'+(tr===0?'#E05555':'var(--gold)')+'">'+tr+'</div><div class="stat-l">Séances restantes</div></div></div>'+
-    '<div class="sec-h"><h2>Mes inscriptions</h2></div>';
-  if(!s.inscriptions.length)h+='<div class="empty">Aucune inscription.</div>';
-  s.inscriptions.forEach(function(ins){
-    var co=getCourse(ins.courseId);var pk=getPack(ins.packId);var prof=getProf(co.profId);
-    if(ins.type==='illimite'){h+='<div class="card" onclick="openCoursDetail(\''+ ins.courseId +'\')" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:.4rem"><div><div class="card-title">'+co.nom+'</div><div class="card-sub">'+co.jour+(prof?' · '+prof.prenom:'')+'</div></div><span class="badge bg-purple">∞ Illimité</span></div><div style="font-size:1rem;color:var(--muted)">'+(ins.assiste||0)+' séances suivies · '+pk.nom+'</div></div>'}
-    else{var pct=Math.round(((ins.total||0)-(ins.restant||0))/(ins.total||1)*100);h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:.4rem"><div><div class="card-title">'+co.nom+'</div><div class="card-sub">'+co.jour+(prof?' · '+prof.prenom:'')+'</div></div><span style="font-size:1rem;font-weight:700;color:'+(ins.restant===0?'#E05555':'var(--gold)')+'">'+ins.restant+'/'+ins.total+'</span></div><div style="font-size:1rem;color:var(--muted);margin-bottom:.4rem">'+pk.nom+'</div><div class="pbar"><div class="pfill" style="width:'+pct+'%"></div></div></div>'}
-  });
-  if(pendingIds.length){h+='<div class="card" style="border-color:rgba(244,162,97,0.2)"><div style="font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.5rem">Demandes en attente</div>'+pendingIds.map(function(cid){var co=getCourse(cid);return'<div style="font-size:1.1rem;padding:.3rem 0;color:var(--muted2)">· '+co.nom+' <span class="pending-badge">En attente</span></div>'}).join('')+'</div>'}
-  h+='<div class="sec-h" style="margin-top:1.1rem"><h2>Cours disponibles</h2></div>';
-  var cnt=0;
-  COURSES.forEach(function(c,i){
-    var dispo=c.places-c.inscrits;
-    var alreadyIn=s.inscriptions.some(function(ins){return ins.courseId===c.id});
-    var hasPending=pendingIds.indexOf(c.id)>=0;
-    if(dispo>0&&!alreadyIn&&!hasPending){
-      cnt++;var prof=getProf(c.profId);var nextS=getNextSession(c);
-            h+='<div class="card" data-cid="'+c.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:.5rem">'+
-        '<div><div class="card-title">'+c.nom+'</div><div class="card-sub">'+c.jour+' · '+fmtH(c.heure,c.duree)+(prof?' · '+prof.prenom:'')+'</div></div>'+
-        '<span class="badge bg-green">'+dispo+' pl.</span></div>'+
-        '<div style="display:flex;align-items:center;justify-content:space-between">'+
-          '<div style="font-size:1rem;color:var(--muted2)">'+c.packs.map(function(pid){var p=getPack(pid);return p?p.prix+'€':''}).join(' / ')+'</div>'+
-          '<button class="btn-add" onclick="openMod(\'inscriptionrequest\','+i+')" style="font-size:1.05rem;padding:.3rem .85rem">S\'inscrire</button></div></div>';
     }
-  });
-  if(!cnt)h+='<div class="empty">Aucun cours disponible.</div>';
+  } else {
+    // ── Tous les cours ──
+    if(!COURSES.length){
+      h+='<div class="empty">Aucun cours disponible.</div>';
+    } else {
+      COURSES.forEach(function(co){
+        var prof=getProf(co.profId);
+        var next=getNextSession(co);
+        var dispo=co.places-(co.inscrits||0);
+        var alreadyIn=s.inscriptions.some(function(ins){return ins.courseId===co.id;});
+        var hasPending=pendingIds.indexOf(co.id)>=0;
+        var hFin='';
+        if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
+        var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
+        var diffLabel=next?(next.diff===0?'Aujourd\'hui':next.diff===1?'Demain':'Dans '+next.diff+' jours'):'—';
+        var borderCol=alreadyIn?'rgba(42,127,232,0.25)':dispo===0?'rgba(220,50,50,0.2)':'rgba(255,255,255,0.08)';
+        var bgCol=alreadyIn?'linear-gradient(135deg,rgba(42,127,232,0.12),rgba(42,127,232,0.04))':'rgba(255,255,255,0.02)';
+        h+='<div data-cid="'+co.id+'" onclick="openCoursDetail(this.dataset.cid)" style="cursor:pointer;background:'+bgCol+';border:1px solid '+borderCol+';border-radius:14px;padding:1rem 1.2rem;margin-bottom:.75rem">'+
+          '<div style="display:flex;align-items:center;gap:.9rem">'+
+            '<div style="text-align:center;min-width:52px">'+
+              (next?'<div style="font-family:Bebas Neue,sans-serif;font-size:2rem;color:'+(dispo===0?'#E05555':'var(--accent)')+';line-height:1">'+next.date+'</div><div style="font-size:.7rem;color:var(--muted)">'+next.jour+'</div>':'<div style="font-size:.7rem;color:var(--muted)">—</div>')+
+            '</div>'+
+            '<div style="width:1px;height:44px;background:var(--border)"></div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:1rem;font-weight:700;color:var(--white)">'+co.nom+'</div>'+
+              '<div style="font-size:.78rem;color:var(--muted2);margin-top:.1rem">'+horaire+(prof?' · '+prof.prenom:'')+'</div>'+
+              '<div style="font-size:.8rem;margin-top:.25rem;font-weight:600;color:'+(alreadyIn?'var(--accent2)':dispo===0?'#E05555':'#27AE60')+'">'+
+                (alreadyIn?'✓ Inscrit':hasPending?'En attente':dispo===0?'Complet':diffLabel)+
+              '</div>'+
+            '</div>'+
+            '<span class="badge '+(alreadyIn?'bg-blue':hasPending?'bg-gold':dispo===0?'bg-red':'bg-green')+'" style="flex-shrink:0">'+
+              (alreadyIn?'Inscrit':hasPending?'Attente':dispo===0?'Complet':dispo+' pl.')+
+            '</span>'+
+          '</div>'+
+        '</div>';
+      });
+    }
+  }
   return h;
 }
+
+
 function renderSQR(s){
   return'<div class="qr-display-wrap"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:1.8rem;letter-spacing:.06em;color:var(--accent);margin-bottom:.3rem">Mon QR Code</div>'+
     '<div style="font-size:1rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.3rem">À présenter avant chaque cours</div>'+

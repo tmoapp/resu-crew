@@ -1922,45 +1922,56 @@ function renderFeed(isProf){
 // ── CALENDRIER SÉANCES ──
 async function loadSeances(){
   if(!SUPABASE_READY){tPage('courses');return;}
-  // Générer les 8 prochaines semaines pour chaque cours
-  await generateSeances();
-  // Charger les séances existantes depuis Supabase
+  toast('Chargement du calendrier...','info');
   var today=new Date(); today.setHours(0,0,0,0);
   var futur=new Date(today); futur.setDate(futur.getDate()+60);
-  var {data,error}=await sb.from('seances').select('*')
+  // 1. Charger d'abord les séances existantes
+  var {data}=await sb.from('seances').select('*')
     .gte('date',today.toISOString().split('T')[0])
     .lte('date',futur.toISOString().split('T')[0])
     .order('date');
-  if(data) SEANCES=data;
+  SEANCES=data||[];
+  // 2. Générer les dates manquantes
+  await generateSeances();
+  // 3. Recharger après génération
+  var {data:data2}=await sb.from('seances').select('*')
+    .gte('date',today.toISOString().split('T')[0])
+    .lte('date',futur.toISOString().split('T')[0])
+    .order('date');
+  SEANCES=data2||[];
   tPage('courses');
 }
 
 async function generateSeances(){
-  // Pour chaque cours, générer les 8 prochaines dates si elles n'existent pas
   var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
   var today=new Date(); today.setHours(0,0,0,0);
+  var toInsert=[];
   for(var ci=0;ci<COURSES.length;ci++){
     var co=COURSES[ci];
     var targetDay=days[co.jour];
     if(targetDay===undefined) continue;
-    var dates=[];
+    // Trouver la prochaine occurrence du bon jour
     var d=new Date(today);
     var diff=targetDay-d.getDay();
     if(diff<0) diff+=7;
-    if(diff===0 && co.heure && new Date().getHours()>=parseInt(co.heure)) diff=7;
+    if(diff===0&&co.heure&&new Date().getHours()>=parseInt(co.heure)) diff=7;
     d.setDate(d.getDate()+diff);
+    // Générer 8 semaines consécutives
     for(var w=0;w<8;w++){
-      dates.push(new Date(d));
-      d.setDate(d.getDate()+7);
-    }
-    // Insérer uniquement les dates manquantes
-    for(var di=0;di<dates.length;di++){
-      var ds=dates[di].toISOString().split('T')[0];
+      var ds=d.toISOString().split('T')[0];
+      // Vérifier si cette date existe déjà dans SEANCES
       var exists=SEANCES.some(function(s){return s.cours_id===co.id&&s.date===ds;});
       if(!exists){
-        await sb.from('seances').insert({cours_id:co.id,date:ds,statut:'actif'}).catch(function(){});
+        toInsert.push({cours_id:co.id,date:ds,statut:'actif'});
       }
+      d.setDate(d.getDate()+7); // semaine suivante
     }
+  }
+  // Insérer en batch si nécessaire
+  if(toInsert.length>0){
+    var {error}=await sb.from('seances').insert(toInsert);
+    if(error) console.warn('[RC] generateSeances error:',error.message);
+    else console.log('[RC] Séances générées:',toInsert.length);
   }
 }
 

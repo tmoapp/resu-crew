@@ -610,6 +610,9 @@ async function loadFromSupabase(){
         if(demandesIns.data) INSCRIPTION_REQUESTS=demandesIns.data.map(function(d){
           return{id:d.id,studentId:d.eleve_id,courseId:d.cours_id,packId:d.pack_id,date:new Date(d.created_at).toLocaleDateString('fr'),msg:d.message||''};
         });
+        // Charger les réservations séance unique
+        var resaData=await sb.from('reservations_seance').select('*').eq('statut','attente').order('created_at');
+        if(resaData.data) RESERVATIONS_SEANCE=resaData.data;
       }
     }
     // Charger les séances (pour élèves et profs)
@@ -1418,6 +1421,25 @@ async function approveIns(reqId){
   }
 }
 function rejectIns(reqId){var i=INSCRIPTION_REQUESTS.findIndex(function(r){return r.id===reqId});if(i>=0){INSCRIPTION_REQUESTS.splice(i,1);toast('Refusée');tPage('students')}}
+
+async function confirmResa(id){
+  if(SUPABASE_READY){
+    await sb.from('reservations_seance').update({statut:'confirme'}).eq('id',id).catch(function(){});
+  }
+  RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
+  toast('Réservation confirmée ✓');
+  tPage('students');
+}
+
+async function rejectResa(id){
+  if(!confirm('Annuler cette réservation ?')) return;
+  if(SUPABASE_READY){
+    await sb.from('reservations_seance').update({statut:'annule'}).eq('id',id).catch(function(){});
+  }
+  RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
+  toast('Réservation annulée');
+  tPage('students');
+}
 async function submitInsReq(courseIdx){
   var sp=document.querySelector('.pack-option.selected');if(!sp){toast('Choisissez un pack','err');return}
   var s=CURRENT_PROFILE||STUDENTS[LOGGED_STUDENT];
@@ -1694,6 +1716,8 @@ async function submitInscription(type){
     }
     closeMod();
     closeCoursDetail();
+    S_COURS_TAB='mes_cours';
+    sPage('courses');
     toast('Séance réservée ! En attente de confirmation.','info');
   }
 }
@@ -2050,6 +2074,7 @@ function showValidationError(msg){
 var T_COURSE_TAB='cours';
 var S_COURS_TAB='mes_cours'; // 'mes_cours' | 'tous'
 var SEANCES=[]; // {id, cours_id, date, statut, note}
+var RESERVATIONS_SEANCE=[]; // réservations séances uniques
 var SELECTED_COURS_ID=null;
 function tPage(p){
   ['feed','courses','profs','students'].forEach(function(x){var b=document.getElementById('tn-'+x);if(b)b.className='nb'+(x===p?' on':'')});
@@ -2262,7 +2287,7 @@ function renderTProfs(){
 }
 
 function renderTStudents(){
-  var total=PENDING_ACCOUNTS.length+INSCRIPTION_REQUESTS.length;
+  var total=PENDING_ACCOUNTS.length+INSCRIPTION_REQUESTS.length+RESERVATIONS_SEANCE.length;
   var h='<div class="sec-h"><h2>En attente ('+total+')</h2><button class="btn-add" onclick="openMod(\'newstudent\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Créer</button></div>';
   if(PENDING_ACCOUNTS.length){
     h+='<div class="card"><div style="font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Comptes à valider</div>';
@@ -2274,6 +2299,29 @@ function renderTStudents(){
     INSCRIPTION_REQUESTS.forEach(function(req){
       var s=getStudent(req.studentId);var co=getCourse(req.courseId);var pk=getPack(req.packId);if(!s)return;
       h+='<div class="req-row"><div class="req-info"><div class="req-name">'+s.prenom+' '+s.nom+'</div><div class="req-detail">'+co.nom+' · '+pk.nom+' ('+pk.prix+' €)<br>'+req.date+(req.msg?' — "'+req.msg+'"':'')+'</div></div><div class="req-actions"><button class="btn-approve" onclick="approveIns(\''+req.id+'\')">✓</button><button class="btn-reject" onclick="rejectIns(\''+req.id+'\')">✕</button></div></div>';
+    });
+    h+='</div>';
+  }
+  // Réservations séances uniques
+  if(RESERVATIONS_SEANCE.length){
+    h+='<div class="card"><div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Réservations séance unique</div>';
+    RESERVATIONS_SEANCE.forEach(function(r){
+      var co=getCourse(r.cours_id);
+      var d=new Date(r.date+'T12:00:00');
+      var months=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+      var weekDays=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      var dateStr=weekDays[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()];
+      var stu=STUDENTS.find(function(s){return s.id===r.eleve_id;})||{prenom:'?',nom:'?'};
+      h+='<div class="req-row">'+
+        '<div class="req-info">'+
+          '<div class="req-name">'+stu.prenom+' '+stu.nom+'</div>'+
+          '<div class="req-detail">'+(co?co.nom:'?')+' · '+dateStr+' · '+r.montant+' €</div>'+
+        '</div>'+
+        '<div class="req-actions">'+
+          '<button class="btn-approve" data-rid="'+r.id+'" onclick="confirmResa(this.dataset.rid)">✓</button>'+
+          '<button class="btn-reject" data-rid="'+r.id+'" onclick="rejectResa(this.dataset.rid)">✕</button>'+
+        '</div>'+
+      '</div>';
     });
     h+='</div>';
   }

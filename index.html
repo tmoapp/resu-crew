@@ -2438,19 +2438,13 @@ function sPage(p){
   var s=CURRENT_PROFILE||STUDENTS[LOGGED_STUDENT]||{};
   if(p==='feed')el.innerHTML=renderFeed(false);
   else if(p==='courses'){
-    // Rafraîchir les inscriptions depuis Supabase avant d'afficher
-    if(SUPABASE_READY&&s&&s.id){
-      sb.from('inscriptions').select('*').eq('eleve_id',s.id).then(function(res){
-        if(res.data){
-          s.inscriptions=res.data.map(function(i){return{courseId:i.cours_id,packId:i.pack_id,type:i.type,restant:i.seances_restantes,total:i.seances_total,assiste:i.seances_assistees||0,paye:parseFloat(i.montant_paye||0),dbId:i.id};});
-          s.montant=s.inscriptions.reduce(function(a,i){return a+i.paye;},0);
-          if(CURRENT_PROFILE&&CURRENT_PROFILE.id===s.id) Object.assign(CURRENT_PROFILE,{inscriptions:s.inscriptions,montant:s.montant});
-          el.innerHTML=renderSCourses(s);
-          el.querySelectorAll('.card[data-cid]').forEach(function(card){card.addEventListener('click',function(e){if(!e.target.closest('button'))openCoursDetail(card.dataset.cid);});});
-        }
+    el.innerHTML=renderSCourses(s);
+    setTimeout(function(){
+      el.querySelectorAll('[data-cid]').forEach(function(card){
+        card.addEventListener('click',function(e){if(!e.target.closest('button'))openCoursDetail(this.dataset.cid);});
       });
-    }
-    el.innerHTML=renderSCourses(s);setTimeout(function(){el.querySelectorAll('.card[data-cid]').forEach(function(card){card.addEventListener('click',function(e){if(!e.target.closest('button'))openCoursDetail(card.dataset.cid);});});},0);}
+    },0);
+  }
   else if(p==='profs')el.innerHTML=renderSProfs();
   else if(p==='qr'){
     var qrStudent=CURRENT_PROFILE||s;
@@ -2480,7 +2474,9 @@ function renderSProfs(){
   return h;
 }
 function renderSCourses(s){
-  var pendingIds=INSCRIPTION_REQUESTS.filter(function(r){return r.studentId===s.id}).map(function(r){return r.courseId});
+  if(!s) return '<div class="empty">Chargement...</div>';
+  var sid=s.id||(CURRENT_USER&&CURRENT_USER.id)||'';
+  var pendingIds=INSCRIPTION_REQUESTS.filter(function(r){return r.studentId===sid}).map(function(r){return r.courseId});
   var nivMap={'Débutant':'bg-green','Intermédiaire':'bg-gold','Avancé':'bg-blue','Tous niveaux':'bg-muted'};
   var activeSt='background:var(--accent);color:white;border:none;';
   var inactiveSt='background:transparent;color:var(--muted);border:none;';
@@ -2491,7 +2487,7 @@ function renderSCourses(s){
     '<button style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='tous'?activeSt:inactiveSt)+'" onclick="S_COURS_TAB=\'tous\';sPage(\'courses\')">Tous les cours</button>'+
   '</div>';
 
-  var myInscriptions=(s&&s.inscriptions&&s.inscriptions.length)?s.inscriptions:[];
+  var myInscriptions=(s&&s.inscriptions)?s.inscriptions:[];
   if(S_COURS_TAB==='mes_cours'){
     if(!myInscriptions.length){
       h+='<div class="empty">Aucune inscription.<br>Consultez "Tous les cours".</div>';
@@ -2530,8 +2526,7 @@ function renderSCourses(s){
     }
 
     // ── Réservations séances uniques ──
-    var myId=CURRENT_USER?CURRENT_USER.id:(s?s.id:null);
-    var resasEleve=myId?RESERVATIONS_SEANCE.filter(function(r){return r.eleve_id===myId&&r.statut!=='annule';}):[];
+    var resasEleve=sid?RESERVATIONS_SEANCE.filter(function(r){return r.eleve_id===sid&&r.statut!=='annule';}):[];
     if(resasEleve.length){
       var months2=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
       var weekDays2=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
@@ -2581,7 +2576,7 @@ function renderSCourses(s){
         var prof=getProf(co.profId);
         var next=getNextSession(co);
         var dispo=co.places-(co.inscrits||0);
-        var alreadyIn=s.inscriptions.some(function(ins){return ins.courseId===co.id;});
+        var alreadyIn=myInscriptions.some(function(ins){return ins.courseId===co.id;});
         var hasPending=pendingIds.indexOf(co.id)>=0;
         var hFin='';
         if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}

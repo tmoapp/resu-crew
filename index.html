@@ -1641,7 +1641,7 @@ function openCoursDetail(courseId){
     var coIdx=COURSES.findIndex(function(x){return x.id===courseId;});
     inscBtns='<div style="display:flex;gap:.6rem;margin-top:.8rem">'+
       '<button class="btn-primary" style="flex:1;margin:0" data-idx="'+coIdx+'" onclick="closeCoursDetail();openMod(\'course\',parseInt(this.dataset.idx))">✎ Modifier</button>'+
-      '<button class="btn-primary" style="flex:1;margin:0;background:rgba(220,50,50,0.15);border:1px solid rgba(220,50,50,0.4);color:#E05555" data-cid="'+courseId+'" onclick="closeCoursDetail();deleteCourse(this.dataset.cid)">Supprimer</button>'+
+      '<button class="btn-primary" style="flex:1;margin:0;background:rgba(220,50,50,0.15);border:1px solid rgba(220,50,50,0.4);color:#E05555" onclick="deleteCourseFromDetail()">Supprimer</button>'+
     '</div>';
   } else if(ROLE==='eleve'){
     if(alreadyIn){
@@ -2371,6 +2371,20 @@ function renderTCalendrier(){
   return h;
 }
 
+
+async function deleteCourseFromDetail(){
+  var id=CURRENT_COURS_DETAIL_ID;
+  if(!id){toast('Erreur: cours non identifié','err');return;}
+  closeCoursDetail();
+  await deleteCourse(id);
+}
+
+async function deleteCourseFromDetail(){
+  var id=CURRENT_COURS_DETAIL_ID;
+  if(!id){toast('Erreur: cours non identifié','err');return;}
+  closeCoursDetail();
+  await deleteCourse(id);
+}
 
 async function deleteCourse(id){
   if(!confirm('Supprimer ce cours ? Cette action est irréversible.')) return;

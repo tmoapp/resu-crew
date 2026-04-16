@@ -2473,6 +2473,11 @@ function renderSProfs(){
   if(!PROFS.length)h+='<div class="empty">Aucun professeur enregistré.</div>';
   return h;
 }
+function switchCoursTab(btn){
+  S_COURS_TAB=btn.dataset.tab;
+  sPage('courses');
+}
+
 function renderSCourses(s){
   if(!s) return '<div class="empty">Chargement...</div>';
   var sid=s.id||(CURRENT_USER&&CURRENT_USER.id)||'';
@@ -2483,8 +2488,8 @@ function renderSCourses(s){
 
   // ── Toggle ──
   var h='<div style="display:flex;gap:4px;background:rgba(0,0,0,0.3);border-radius:8px;padding:4px;border:1px solid var(--border);margin-bottom:1rem">'+
-    '<button style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+( S_COURS_TAB==='mes_cours'?activeSt:inactiveSt)+'" onclick="S_COURS_TAB=\'mes_cours\';sPage(\'courses\')">Mes cours</button>'+
-    '<button style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='tous'?activeSt:inactiveSt)+'" onclick="S_COURS_TAB=\'tous\';sPage(\'courses\')">Tous les cours</button>'+
+    '<button data-tab="mes_cours" onclick="switchCoursTab(this)" style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='mes_cours'?activeSt:inactiveSt)+'">Mes cours</button>'+
+    '<button data-tab="tous" onclick="switchCoursTab(this)" style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='tous'?activeSt:inactiveSt)+'">Tous les cours</button>'+
   '</div>';
 
   var myInscriptions=(s&&s.inscriptions)?s.inscriptions:[];

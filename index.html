@@ -2551,6 +2551,7 @@ function renderSCourses(s){
         if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
         var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
         var isConfirme=r.statut==='confirme';
+        var isRefuse=r.statut==='refuse';
         var isAttente=r.statut==='attente';
         var borderCol=isConfirme?'rgba(39,174,96,0.25)':'rgba(244,162,97,0.25)';
         var bgCol=isConfirme?'linear-gradient(135deg,rgba(39,174,96,0.12),rgba(39,174,96,0.04))':'linear-gradient(135deg,rgba(244,162,97,0.1),rgba(244,162,97,0.03))';

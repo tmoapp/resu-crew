@@ -1611,9 +1611,14 @@ function getNextSession(cours){
   return{date:next.getDate()+' '+months[next.getMonth()],jour:cours.jour,diff:diff2,ds:next.toISOString().split('T')[0]};
 }
 
-function openCoursDetail(courseId){
+async function openCoursDetail(courseId){
   var co=getCourse(courseId);
   if(!co||!co.nom) return;
+  // Recharger le vrai compte d'inscrits depuis Supabase
+  if(SUPABASE_READY){
+    var {data:ins}=await sb.from('inscriptions').select('cours_id').eq('cours_id',courseId);
+    if(ins) co.inscrits=ins.length;
+  }
   var ov=document.getElementById('cours-detail-ov');
   var inner=document.getElementById('cours-detail-inner');
   if(!ov||!inner) return;

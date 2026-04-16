@@ -2435,9 +2435,15 @@ function renderTStudents(){
 function sPage(p){
   ['feed','courses','profs','qr','profile'].forEach(function(x){var b=document.getElementById('sn-'+x);if(b)b.className='nb'+(x===p?' on':'')});
   var el=document.getElementById('s-page');
-  var s=CURRENT_PROFILE||STUDENTS[LOGGED_STUDENT]||{};
+  var s=STUDENTS[LOGGED_STUDENT]||CURRENT_PROFILE||{};
   if(p==='feed')el.innerHTML=renderFeed(false);
   else if(p==='courses'){
+    // S'assurer que s est à jour avec les inscriptions
+    if(CURRENT_PROFILE&&CURRENT_PROFILE.id){
+      s=CURRENT_PROFILE;
+      // Synchroniser STUDENTS[0]
+      if(!STUDENTS[0]||STUDENTS[0].id!==CURRENT_PROFILE.id) STUDENTS[0]=CURRENT_PROFILE;
+    }
     el.innerHTML=renderSCourses(s);
     setTimeout(function(){
       el.querySelectorAll('[data-cid]').forEach(function(card){

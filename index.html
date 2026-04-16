@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Resurrection Crew</title>
+<title>Resu.Crew</title>
   <meta name="theme-color" content="#07090F" media="(prefers-color-scheme: light)"/>
   <meta name="theme-color" content="#07090F" media="(prefers-color-scheme: dark)"/>
   <meta name="mobile-web-app-capable" content="yes"/>
@@ -873,7 +873,7 @@ function openMod(type,idx){
     var packsHtml=PACKS.map(function(pk){var sel=c&&c.packs&&c.packs.indexOf(pk.id)>=0;return'<label style="display:flex;align-items:center;gap:.6rem;padding:.42rem 0;cursor:pointer;font-size:1rem"><input type="checkbox" value="'+pk.id+'" '+(sel?'checked':'')+' style="accent-color:var(--accent)"/> '+pk.nom+' <span style="color:var(--gold);margin-left:auto">'+pk.prix+' €</span></label>'}).join('');
     B.innerHTML=
       '<div class="field-row"><label>Nom</label><input class="inp" id="f-nom" value="'+(c?c.nom:'')+'" placeholder="Ex: Salsa Intermédiaire"/></div>'+
-      '<div class="row2"><div class="field-row"><label>Style</label><select class="inp" id="f-style" style="margin:0">'+DANCE_STYLES.map(function(s){return'<option'+(c&&c.style===s?' selected':'')+'>'+s+'</option>'}).join('')+'</select></div>'+
+      '<div class="row2"><div class="field-row"><label>Style</label><input class="inp" id="f-style" placeholder="Ex: Hip-hop, Afrobeat..." value="'+(c&&c.style?c.style:'')+'"/></div>'+
       '<div class="field-row"><label>Professeur</label><select class="inp" id="f-prof" style="margin:0"><option value="">— Choisir —</option>'+profsOpts+'</select></div></div>'+
       '<div class="row2"><div class="field-row"><label>Jour</label><select class="inp" id="f-jour" style="margin:0">'+['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'].map(function(j){return'<option'+(c&&c.jour===j?' selected':'')+'>'+j+'</option>'}).join('')+'</select></div>'+
       '<div class="field-row"><label>Heure</label><input class="inp" id="f-h" type="time" value="'+(c?c.heure:'19:00')+'" style="margin:0"/></div></div>'+
@@ -1328,11 +1328,7 @@ async function deleteStudent(i){
   toast('Compte supprimé ✓');
   tPage('students');
 }
-async function deleteCourse(i){
-  if(!confirm('Supprimer ce cours ?'))return;
-  if(SUPABASE_READY){ var ok=await sbDelete('cours',COURSES[i].id); if(!ok)return; }
-  COURSES.splice(i,1);toast('Cours supprimé');tPage('courses');
-}
+
 async function deleteProf(i){
   if(!confirm('Supprimer ce professeur ?'))return;
   if(SUPABASE_READY){ var ok=await sbDelete('profs',PROFS[i].id); if(!ok)return; }
@@ -1615,7 +1611,13 @@ function openCoursDetail(courseId){
 
   // Build inscription buttons
   var inscBtns='';
-  if(ROLE==='eleve'){
+  if(ROLE==='prof'){
+    var coIdx=COURSES.findIndex(function(x){return x.id===courseId;});
+    inscBtns='<div style="display:flex;gap:.6rem;margin-top:.8rem">'+
+      '<button class="btn-primary" style="flex:1;margin:0" data-idx="'+coIdx+'" onclick="closeCoursDetail();openMod(\'course\',parseInt(this.dataset.idx))">✎ Modifier</button>'+
+      '<button class="btn-primary" style="flex:1;margin:0;background:rgba(220,50,50,0.15);border:1px solid rgba(220,50,50,0.4);color:#E05555" data-cid="'+courseId+'" onclick="closeCoursDetail();deleteCourse(this.dataset.cid)">Supprimer</button>'+
+    '</div>';
+  } else if(ROLE==='eleve'){
     if(alreadyIn){
       inscBtns='<div style="margin-top:.8rem;padding:.75rem;background:rgba(42,127,232,0.08);border:1px solid rgba(42,127,232,0.2);border-radius:8px;text-align:center;font-size:.85rem;color:var(--accent2)">\u2713 Vous \u00eates inscrit \u00e0 ce cours</div>';
     } else if(hasPending){
@@ -2177,7 +2179,7 @@ function tPage(p){
   ['feed','courses','profs','students'].forEach(function(x){var b=document.getElementById('tn-'+x);if(b)b.className='nb'+(x===p?' on':'')});
   var el=document.getElementById('t-page');
   if(p==='feed')el.innerHTML=renderFeed(true);
-  else if(p==='courses'){el.innerHTML=renderTCourses();setTimeout(function(){el.querySelectorAll('.card[data-cid]').forEach(function(card){card.addEventListener('click',function(e){if(!e.target.closest('button'))openCoursDetail(card.dataset.cid);});});},0);}
+  else if(p==='courses'){el.innerHTML=renderTCourses();setTimeout(function(){el.querySelectorAll('[data-cid]').forEach(function(card){card.addEventListener('click',function(e){if(!e.target.closest('button'))openCoursDetail(this.dataset.cid);});});},0);}
   else if(p==='profs')el.innerHTML=renderTProfs();
   else if(p==='students')el.innerHTML=renderTStudents();
 }
@@ -2344,27 +2346,62 @@ function renderTCalendrier(){
 }
 
 
+async function deleteCourse(id){
+  if(!confirm('Supprimer ce cours ? Cette action est irréversible.')) return;
+  if(SUPABASE_READY){
+    var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+    var r=await fetch(SUPABASE_URL+'/rest/v1/cours?id=eq.'+id,{
+      method:'DELETE',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}
+    });
+    if(!r.ok){var t=await r.text();toast('Erreur: '+t,'err');return;}
+  }
+  COURSES=COURSES.filter(function(co){return co.id!==id;});
+  toast('Cours supprimé');
+  tPage('courses');
+}
+
 function renderTCourses(){
   var h='<div class="tab-row" style="overflow-x:auto;flex-wrap:nowrap">'+
     '<button class="tab-btn'+(T_COURSE_TAB==='cours'?' on':'')+'" onclick="T_COURSE_TAB=\'cours\';tPage(\'courses\')">Cours</button>'+
     '<button class="tab-btn'+(T_COURSE_TAB==='packs'?' on':'')+'" onclick="T_COURSE_TAB=\'packs\';tPage(\'courses\')">Packs & Tarifs</button>'+
-    '<button class="tab-btn'+(T_COURSE_TAB==='styles'?' on':'')+'" onclick="T_COURSE_TAB=\'styles\';tPage(\'courses\')">Styles</button>'+
+    
     '<button class="tab-btn'+(T_COURSE_TAB==='calendrier'?' on':'')+'" onclick="T_COURSE_TAB=\'calendrier\';loadSeances();tPage(\'courses\')">Calendrier</button>'+
   '</div>';
   if(T_COURSE_TAB==='cours'){
-    var nivMap={'Débutant':'bg-green','Intermédiaire':'bg-gold','Avancé':'bg-blue','Tous niveaux':'bg-muted'};
-    h+='<div class="sec-h"><h2>Cours ('+COURSES.length+')</h2><button class="btn-add" onclick="openMod(\'course\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Créer</button></div>';
-    if(!COURSES.length)return h+'<div class="empty">Aucun cours.</div>';
-    COURSES.forEach(function(c,i){
-      var pct=Math.round(c.inscrits/c.places*100);
-      var packNames=c.packs.map(function(pid){var p=getPack(pid);return p?p.nom:''}).filter(Boolean);
-      var prof=getProf(c.profId);
-      h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:.5rem"><div style="flex:1;min-width:0"><div class="card-title">'+c.nom+'</div><div class="card-sub">'+c.jour+' · '+fmtH(c.heure,c.duree)+(prof?' · '+prof.prenom+' '+prof.nom:'')+'</div></div><span class="badge '+(nivMap[c.niveau]||'bg-gold')+'" style="margin-left:.5rem;flex-shrink:0">'+c.niveau+'</span></div>'+
-        '<div style="font-size:1rem;color:var(--muted2);margin-bottom:.4rem">Packs : '+(packNames.length?packNames.join(', '):'Aucun')+'</div>'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;font-size:1rem;color:var(--muted2)"><span>'+c.inscrits+'/'+c.places+(c.inscrits>=c.places?' <span style="color:#E05555">— Complet</span>':'')+'</span>'+
-        '<div style="display:flex;gap:.4rem"><button class="btn-add" style="font-size:1.1rem;padding:.22rem .6rem" onclick="openMod(\'course\','+i+')">✏</button><button style="padding:.22rem .6rem;font-size:1.1rem;border-radius:4px;border:1px solid rgba(220,50,50,0.25);background:rgba(220,50,50,0.08);color:#E05555;cursor:pointer;font-family:\'Outfit\',sans-serif" onclick="deleteCourse('+i+')">✕</button></div></div>'+
-        '<div class="pbar"><div class="pfill" style="width:'+pct+'%"></div></div></div>';
-    });
+    h+='<div class="sec-h"><h2>Cours ('+COURSES.length+')</h2><button class="btn-add" onclick="openMod(\'course\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Créer</button></div>';
+    if(!COURSES.length){
+      h+='<div class="empty">Aucun cours créé.</div>';
+    } else {
+      COURSES.forEach(function(co){
+        var prof=getProf(co.profId);
+        var next=getNextSession(co);
+        var hFin='';
+        if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
+        var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
+        var diffLabel=next?(next.diff===0?'Aujourd\'hui':next.diff===1?'Demain':'Dans '+next.diff+' jours'):'—';
+        var resasConf=RESERVATIONS_SEANCE.filter(function(r){return r.cours_id===co.id&&r.statut==='confirme';}).length;
+        var dispo=Math.max(0,co.places-(co.inscrits||0)-resasConf);
+        var placeColor=dispo===0?'#E05555':dispo<=3?'var(--gold)':'#27AE60';
+        h+='<div data-cid="'+co.id+'" onclick="openCoursDetail(this.dataset.cid)" style="cursor:pointer;background:linear-gradient(135deg,rgba(42,127,232,0.15),rgba(42,127,232,0.05));border:1px solid rgba(42,127,232,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:.75rem">'+
+          '<div style="display:flex;align-items:center;gap:.9rem">'+
+            '<div style="text-align:center;min-width:52px">'+
+              (next?'<div style="font-family:Bebas Neue,sans-serif;font-size:2rem;color:var(--accent);line-height:1">'+next.date+'</div><div style="font-size:.7rem;color:var(--muted)">'+next.jour+'</div>':'<div style="font-size:.7rem;color:var(--muted)">—</div>')+
+            '</div>'+
+            '<div style="width:1px;height:44px;background:rgba(42,127,232,0.2)"></div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:1rem;font-weight:700;color:var(--white)">'+co.nom+'</div>'+
+              '<div style="font-size:.78rem;color:var(--muted2);margin-top:.1rem">'+horaire+(prof?' · '+prof.prenom:'')+(co.style?' · '+co.style:'')+'</div>'+
+              '<div style="font-size:.8rem;color:var(--accent2);margin-top:.25rem;font-weight:600">'+diffLabel+'</div>'+
+            '</div>'+
+            '<div style="text-align:right;min-width:40px">'+
+              '<div style="font-size:1rem;font-weight:700;color:'+placeColor+'">'+dispo+'</div>'+
+              '<div style="font-size:.65rem;color:var(--muted)">places</div>'+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      });
+    }
   }else if(T_COURSE_TAB==='packs'){
     h+='<div class="sec-h"><h2>Packs & Tarifs</h2><button class="btn-add" onclick="openMod(\'pack\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Créer</button></div>';
     PACKS.forEach(function(pk,i){
@@ -2373,11 +2410,6 @@ function renderTCourses(){
     if(!PACKS.length)h+='<div class="empty">Aucun pack.</div>';
   }else if(T_COURSE_TAB==='calendrier'){
     h+=renderTCalendrier();
-  }else if(T_COURSE_TAB==='styles'){
-    h+='<div class="sec-h"><h2>Styles de danse</h2></div><div class="card">'+
-      '<div style="font-size:1.05rem;color:var(--muted2);margin-bottom:.9rem;line-height:1.5">Ces styles seront disponibles lors de la création ou modification d\'un cours.</div>'+
-      '<div id="styles-list">'+DANCE_STYLES.map(function(s,i){return'<span class="style-tag">'+s+'<button onclick="removeStyle('+i+')" title="Supprimer">×</button></span>'}).join('')+'</div>'+
-      '<div style="display:flex;gap:.6rem;margin-top:1rem"><input class="inp" id="new-style-inp" placeholder="Nouveau style..." style="flex:1;margin:0" onkeydown="if(event.key===\'Enter\')addStyle()"/><button class="btn-add" onclick="addStyle()" style="padding:.5rem .85rem">Ajouter</button></div></div>';
   }
   return h;
 }
@@ -2682,7 +2714,7 @@ function renderSProfile(s){
 
 <script>
 (function(){
-  var m={name:"Resurrection Crew",short_name:"RC Dance",description:"Ecole de danse RC",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
+  var m={name:"Resurrection Crew",short_name:"RC59",description:"Ecole de danse RC",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
     icons:[
       {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%232A7FE8'/%3E%3Ctext x='96' y='130' font-family='Arial' font-size='90' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml",purpose:"any maskable"},
       {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='60' fill='%232A7FE8'/%3E%3Ctext x='256' y='340' font-family='Arial' font-size='240' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml",purpose:"any maskable"}

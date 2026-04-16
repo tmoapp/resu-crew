@@ -244,7 +244,7 @@ select.inp option{background:#0d1120}textarea.inp{resize:vertical;min-height:80p
 <div class="screen active" id="s-login">
   <div class="login-glow"></div>
   <div class="login-card">
-    <div class="brand-name">Resurrection<br>Crew</div>
+    <div class="brand-name">Resu.Crew</div>
     <div class="brand-tag">Espace membre</div>
 
     <div class="field"><label for="l-email">Email</label><input class="inp" id="l-email" type="email" placeholder="votre@email.com"/></div>
@@ -1597,7 +1597,8 @@ function openCoursDetail(courseId){
   if(!ov||!inner) return;
   var prof=getProf(co.profId);
   var next=getNextSession(co);
-  var dispo=co.places-(co.inscrits||0);
+  var resasConfirmees=RESERVATIONS_SEANCE.filter(function(r){return r.cours_id===co.id&&r.statut==='confirme';}).length;
+  var dispo=Math.max(0,co.places-(co.inscrits||0)-resasConfirmees);
   var alreadyIn=false;
   var hasPending=false;
   if(CURRENT_USER&&ROLE==='eleve'){
@@ -1651,10 +1652,10 @@ function openCoursDetail(courseId){
             '<div style="font-size:1rem;font-weight:600;color:var(--white)">'+horaire+'</div>'+
             '<div style="font-size:.9rem;color:var(--muted2)">'+co.duree+' min'+(next.diff===0?' \u00b7 Aujourd\'hui':next.diff===1?' \u00b7 Demain':' \u00b7 Dans '+next.diff+' jours')+'</div>'+
           '</div>'+
-          '<div style="margin-left:auto;text-align:right">'+
+          '<div style="margin-left:auto;text-align:right">'+(ROLE==='prof'?
             '<div style="font-size:1rem;font-weight:600;color:'+(dispo===0?'#E05555':'#27AE60')+'">'+dispo+'</div>'+
-            '<div style="font-size:.8rem;color:var(--muted)">places</div>'+
-          '</div>'+
+            '<div style="font-size:.8rem;color:var(--muted)">places</div>'
+          :'')+'</div>'+
         '</div>'
       :'<div style="font-size:.95rem;color:var(--muted)">Aucun cr\u00e9neau trouv\u00e9</div>')+
     '</div>'+
@@ -1664,8 +1665,26 @@ function openCoursDetail(courseId){
         '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Jour</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem">'+co.jour+'</div></div>'+
         '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Heure</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem">'+horaire+'</div></div>'+
         '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Dur\u00e9e</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem">'+co.duree+' min</div></div>'+
-        '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Places</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem;color:'+(dispo===0?'#E05555':'#27AE60')+'">'+dispo+'/'+co.places+'</div></div>'+
+        '<div style="background:var(--bg2);border-radius:8px;padding:.85rem;border:1px solid var(--border)"><div style="font-size:.82rem;color:var(--muted)">Places</div><div style="font-size:1rem;font-weight:600;margin-top:.2rem;color:'+(dispo===0?'#E05555':'#27AE60')+'">'+(ROLE==='prof'?dispo+'/'+co.places:'—')+'</div></div>'+
       '</div>'+
+      // Panneau places détaillé - prof uniquement
+      (ROLE==='prof'?
+        '<div style="background:rgba(42,127,232,0.06);border:1px solid rgba(42,127,232,0.15);border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">'+
+          '<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Occupation</div>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">'+
+            '<span style="font-size:.82rem;color:var(--muted2)">Inscrits annuels</span>'+
+            '<span style="font-size:.9rem;font-weight:600;color:var(--white)">'+co.inscrits+'</span>'+
+          '</div>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">'+
+            '<span style="font-size:.82rem;color:var(--muted2)">Réservations séance</span>'+
+            '<span style="font-size:.9rem;font-weight:600;color:var(--white)">'+RESERVATIONS_SEANCE.filter(function(r){return r.cours_id===co.id&&r.statut==='confirme';}).length+'</span>'+
+          '</div>'+
+          '<div style="border-top:1px solid rgba(42,127,232,0.15);margin-top:.5rem;padding-top:.5rem;display:flex;justify-content:space-between;align-items:center">'+
+            '<span style="font-size:.82rem;color:var(--muted2)">Places restantes</span>'+
+            '<span style="font-size:1rem;font-weight:700;color:'+(dispo===0?'#E05555':dispo<=3?'var(--gold)':'#27AE60')+'">'+dispo+' / '+co.places+'</span>'+
+          '</div>'+
+        '</div>'
+      :'')+
       (packs.length?
         '<div style="font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem">Tarifs</div>'+
         packs.map(function(pk){
@@ -2626,7 +2645,7 @@ function renderSCourses(s){
               '</div>'+
             '</div>'+
             '<span class="badge '+(alreadyIn?'bg-blue':hasPending?'bg-gold':dispo===0?'bg-red':'bg-green')+'" style="flex-shrink:0">'+
-              (alreadyIn?'Inscrit':hasPending?'Attente':dispo===0?'Complet':dispo+' pl.')+
+              (alreadyIn?'Inscrit':hasPending?'Attente':dispo===0?'Complet':'Disponible')+
             '</span>'+
           '</div>'+
         '</div>';

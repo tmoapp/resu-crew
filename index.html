@@ -596,7 +596,8 @@ async function loadFromSupabase(){
     ]);
     if(profs.data) PROFS=profs.data.map(function(p){return{id:p.id,prenom:p.prenom,nom:p.nom,photo:p.photo_url,styles:p.styles||[],desc:p.description||''};});
     if(cours.data) COURSES=cours.data.map(function(c){return{id:c.id,nom:c.nom,style:c.style,profId:c.prof_id,jour:c.jour,heure:c.heure?c.heure.substring(0,5):c.heure,duree:c.duree_min,places:c.places_max,inscrits:0,niveau:c.niveau,packs:c.packs_ids||[],tarif_seance:c.tarif_seance||null};});
-    // Compter les inscrits réels par cours
+    // Compter les inscrits réels par cours (reset d'abord)
+    COURSES.forEach(function(co){co.inscrits=0;});
     var {data:insData}=await sb.from('inscriptions').select('cours_id');
     if(insData){
       insData.forEach(function(ins){
@@ -631,7 +632,7 @@ async function loadFromSupabase(){
           return{id:d.id,studentId:d.eleve_id,courseId:d.cours_id,packId:d.pack_id,date:new Date(d.created_at).toLocaleDateString('fr'),msg:d.message||''};
         });
         // Charger les réservations séance unique
-        var resaData=await sb.from('reservations_seance').select('*').eq('statut','attente').order('created_at');
+        var resaData=await sb.from('reservations_seance').select('*').in('statut',['attente','confirme']).order('created_at');
         if(resaData.data) RESERVATIONS_SEANCE=resaData.data;
       }
     }
@@ -1836,7 +1837,19 @@ async function submitInscription(type){
     var seanceId=sp.dataset.pack;
     var dateVal=sp.dataset.date;
     var montant=co.tarif_seance||0;
+    // Vérifier si l'élève a déjà une réservation active pour ce cours/cette date
+    var dejaResa=RESERVATIONS_SEANCE.some(function(r){
+      return r.eleve_id===CURRENT_USER.id&&r.cours_id===co.id&&
+             (r.date===dateVal||r.statut==='attente'||r.statut==='confirme')&&
+             r.statut!=='annule'&&r.statut!=='refuse';
+    });
+    if(dejaResa){toast('Vous avez déjà une réservation pour ce cours','err');closeMod();return;}
     if(SUPABASE_READY){
+      // Double-vérification en base
+      var {data:existResa}=await sb.from('reservations_seance')
+        .select('id').eq('eleve_id',CURRENT_USER.id).eq('cours_id',co.id)
+        .not('statut','in','(annule,refuse)').limit(1);
+      if(existResa&&existResa.length>0){toast('Vous avez déjà une réservation pour ce cours','err');closeMod();return;}
       var {error:e2}=await sb.from('reservations_seance').insert({
         eleve_id:CURRENT_USER.id,cours_id:co.id,
         seance_id:seanceId.startsWith('fake')?null:seanceId,
@@ -1844,6 +1857,11 @@ async function submitInscription(type){
       });
       if(e2){toast('Erreur: '+e2.message,'err');return;}
     }
+    // Mettre à jour RESERVATIONS_SEANCE local
+    RESERVATIONS_SEANCE.push({
+      id:'local-'+Date.now(),eleve_id:CURRENT_USER.id,cours_id:co.id,
+      date:dateVal,montant:montant,statut:'attente'
+    });
     closeMod();
     closeCoursDetail();
     S_COURS_TAB='mes_cours';

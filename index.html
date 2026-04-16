@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Resu.Crew</title>
+<title>Resurrection Crew</title>
   <meta name="theme-color" content="#07090F" media="(prefers-color-scheme: light)"/>
   <meta name="theme-color" content="#07090F" media="(prefers-color-scheme: dark)"/>
   <meta name="mobile-web-app-capable" content="yes"/>
@@ -244,7 +244,7 @@ select.inp option{background:#0d1120}textarea.inp{resize:vertical;min-height:80p
 <div class="screen active" id="s-login">
   <div class="login-glow"></div>
   <div class="login-card">
-    <div class="brand-name">Resu.Crew</div>
+    <div class="brand-name">Resurrection<br>Crew</div>
     <div class="brand-tag">Espace membre</div>
 
     <div class="field"><label for="l-email">Email</label><input class="inp" id="l-email" type="email" placeholder="votre@email.com"/></div>
@@ -584,6 +584,14 @@ async function loadFromSupabase(){
     ]);
     if(profs.data) PROFS=profs.data.map(function(p){return{id:p.id,prenom:p.prenom,nom:p.nom,photo:p.photo_url,styles:p.styles||[],desc:p.description||''};});
     if(cours.data) COURSES=cours.data.map(function(c){return{id:c.id,nom:c.nom,style:c.style,profId:c.prof_id,jour:c.jour,heure:c.heure?c.heure.substring(0,5):c.heure,duree:c.duree_min,places:c.places_max,inscrits:0,niveau:c.niveau,packs:c.packs_ids||[],tarif_seance:c.tarif_seance||null};});
+    // Compter les inscrits réels par cours
+    var {data:insData}=await sb.from('inscriptions').select('cours_id');
+    if(insData){
+      insData.forEach(function(ins){
+        var co=COURSES.find(function(x){return x.id===ins.cours_id;});
+        if(co) co.inscrits=(co.inscrits||0)+1;
+      });
+    }
     if(packs.data) PACKS=packs.data.map(function(p){return{id:p.id,nom:p.nom,type:p.type,seances:p.nb_seances,prix:parseFloat(p.prix)};});
     if(styles.data) DANCE_STYLES=styles.data.map(function(s){return s.nom;});
     if(posts.data) POSTS=posts.data.map(function(p){
@@ -2714,7 +2722,7 @@ function renderSProfile(s){
 
 <script>
 (function(){
-  var m={name:"Resurrection Crew",short_name:"RC59",description:"Ecole de danse RC",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
+  var m={name:"Resurrection Crew",short_name:"RC Dance",description:"Ecole de danse RC",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
     icons:[
       {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%232A7FE8'/%3E%3Ctext x='96' y='130' font-family='Arial' font-size='90' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml",purpose:"any maskable"},
       {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='60' fill='%232A7FE8'/%3E%3Ctext x='256' y='340' font-family='Arial' font-size='240' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml",purpose:"any maskable"}

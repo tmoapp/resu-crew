@@ -2374,17 +2374,13 @@ function renderTCalendrier(){
 
 async function deleteCourseFromDetail(){
   var id=CURRENT_COURS_DETAIL_ID;
+  console.log('[RC] deleteCourseFromDetail called, id=', id);
   if(!id){toast('Erreur: cours non identifié','err');return;}
   closeCoursDetail();
   await deleteCourse(id);
 }
 
-async function deleteCourseFromDetail(){
-  var id=CURRENT_COURS_DETAIL_ID;
-  if(!id){toast('Erreur: cours non identifié','err');return;}
-  closeCoursDetail();
-  await deleteCourse(id);
-}
+
 
 async function deleteCourse(id){
   if(!confirm('Supprimer ce cours ? Cette action est irréversible.')) return;

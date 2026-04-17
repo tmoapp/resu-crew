@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Resu.Crew</title>
+<title>Resurrection Crew</title>
   <meta name="theme-color" content="#07090F" media="(prefers-color-scheme: light)"/>
   <meta name="theme-color" content="#07090F" media="(prefers-color-scheme: dark)"/>
   <meta name="mobile-web-app-capable" content="yes"/>
@@ -1430,24 +1430,39 @@ async function rejectPending(i){
   tPage('students');
 }
 async function approveIns(reqId){
-  var req=INSCRIPTION_REQUESTS.find(function(r){return r.id===reqId});if(!req)return;
-  var s=getStudent(req.studentId);var pk=getPack(req.packId);
-  if(s&&pk){
-    if(SUPABASE_READY){
+  var req=INSCRIPTION_REQUESTS.find(function(r){return r.id===reqId});
+  if(!req) return;
+  var s=getStudent(req.studentId);
+  var pk=getPack(req.packId);
+  if(SUPABASE_READY){
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
+    // Créer l'inscription en DB
+    if(pk){
       var insRow={eleve_id:req.studentId,cours_id:req.courseId,pack_id:req.packId,type:pk.type,montant_paye:pk.prix};
       if(pk.type==='illimite'){insRow.seances_assistees=0;}else{insRow.seances_restantes=pk.seances;insRow.seances_total=pk.seances;}
-      var res=await sbInsert('inscriptions',insRow);
-      if(res){await sbUpdate('demandes_inscription',req.id,{statut:'validee'});}
+      await sbInsert('inscriptions',insRow);
     }
-    var e={courseId:req.courseId,packId:req.packId,type:pk.type,paye:pk.prix};
-    if(pk.type==='illimite'){e.assiste=0}else{e.restant=pk.seances;e.total=pk.seances}
-    s.inscriptions.push(e);s.montant+=pk.prix;
-    // Mettre à jour le compteur inscrits du cours
-    var co=getCourse(req.courseId);
-    if(co) co.inscrits=(co.inscrits||0)+1;
-    INSCRIPTION_REQUESTS.splice(INSCRIPTION_REQUESTS.indexOf(req),1);
-    toast('Inscription validée ✓');tPage('students');
+    // Marquer la demande comme validée
+    var r=await fetch(SUPABASE_URL+'/rest/v1/demandes_inscription?id=eq.'+req.id,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
+      body:JSON.stringify({statut:'validee'})
+    });
+    if(!r.ok){var t=await r.text();console.error('[RC] approveIns patch error:',t);}
   }
+  // Mettre à jour localement
+  if(s&&pk){
+    var e={courseId:req.courseId,packId:req.packId,type:pk.type,paye:pk.prix};
+    if(pk.type==='illimite'){e.assiste=0;}else{e.restant=pk.seances;e.total=pk.seances;}
+    s.inscriptions.push(e);
+    s.montant+=pk.prix;
+  }
+  var co=getCourse(req.courseId);
+  if(co) co.inscrits=(co.inscrits||0)+1;
+  // Supprimer de la liste locale - TOUJOURS, même si s ou pk manquant
+  INSCRIPTION_REQUESTS=INSCRIPTION_REQUESTS.filter(function(r){return r.id!==reqId;});
+  toast('Inscription validée ✓');
+  tPage('students');
 }
 function rejectIns(reqId){var i=INSCRIPTION_REQUESTS.findIndex(function(r){return r.id===reqId});if(i>=0){INSCRIPTION_REQUESTS.splice(i,1);toast('Refusée');tPage('students')}}
 
@@ -2775,7 +2790,7 @@ function renderSProfile(s){
 
 <script>
 (function(){
-  var m={name:"Resurrection Crew",short_name:"RC Dance",description:"Ecole de danse RC",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
+  var m={name:"Resurrection Crew",short_name:"Resu.Crew",description:"Ecole de danse RC",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
     icons:[
       {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%232A7FE8'/%3E%3Ctext x='96' y='130' font-family='Arial' font-size='90' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml",purpose:"any maskable"},
       {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='60' fill='%232A7FE8'/%3E%3Ctext x='256' y='340' font-family='Arial' font-size='240' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml",purpose:"any maskable"}

@@ -257,7 +257,7 @@ select.inp option{background:#0d1120}textarea.inp{resize:vertical;min-height:80p
   <div class="login-glow"></div>
   <div class="login-card">
     <div class="brand-name">Resu.Crew</div>
-    <div class="brand-tag">Espace membre</div>
+    <div class="brand-tag">Espace Membre</div>
 
     <div class="field"><label for="l-email">Email</label><input class="inp" id="l-email" type="email" placeholder="votre@email.com"/></div>
     <div class="field"><label for="l-pw">Mot de passe</label><input class="inp" id="l-pw" type="password" placeholder="••••••••"/></div>
@@ -1460,7 +1460,9 @@ async function approveIns(reqId){
   var co=getCourse(req.courseId);
   if(co) co.inscrits=(co.inscrits||0)+1;
   // Supprimer de la liste locale - TOUJOURS, même si s ou pk manquant
+  console.log('[RC] approveIns: removing reqId=',reqId,'from',INSCRIPTION_REQUESTS.length,'requests');
   INSCRIPTION_REQUESTS=INSCRIPTION_REQUESTS.filter(function(r){return r.id!==reqId;});
+  console.log('[RC] after filter:',INSCRIPTION_REQUESTS.length,'requests remain');
   toast('Inscription validée ✓');
   tPage('students');
 }
@@ -2790,7 +2792,7 @@ function renderSProfile(s){
 
 <script>
 (function(){
-  var m={name:"Resurrection Crew",short_name:"Resu.Crew",description:"Compagnie de danse",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
+  var m={name:"Resu.Crew",short_name:"Resu.Crew",description:"Resu.Crew - École de danse",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
     icons:[
       {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%232A7FE8'/%3E%3Ctext x='96' y='130' font-family='Arial' font-size='90' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml",purpose:"any maskable"},
       {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='60' fill='%232A7FE8'/%3E%3Ctext x='256' y='340' font-family='Arial' font-size='240' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml",purpose:"any maskable"}

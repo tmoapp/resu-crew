@@ -357,7 +357,7 @@ select.inp option{background:#0d1120}textarea.inp{resize:vertical;min-height:80p
 // ════════════════════════════════════════════════
 // ⚙️  CONFIGURATION — Remplissez vos clés Supabase
 // ════════════════════════════════════════════════
-var SUPABASE_URL = 'https://yfkirciucifehzthoaqe.supabase.co'; // ex: https://xxxx.supabase.co
+var SUPABASE_URL = 'https://yfkirciucifehzthoaqe.supabase.coVOTRE_URL_SUPABASE'; // ex: https://xxxx.supabase.co
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlma2lyY2l1Y2lmZWh6dGhvYXFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MzQyMzEsImV4cCI6MjA5MTUxMDIzMX0.idwJyAgfj92K8Icst9zGOOkwZfHgliJDEbkOkp6oCyw';     // clé anon/public de Settings > API
 
 var sb = null;
@@ -632,7 +632,7 @@ async function loadFromSupabase(){
           return{id:d.id,studentId:d.eleve_id,courseId:d.cours_id,packId:d.pack_id,date:new Date(d.created_at).toLocaleDateString('fr'),msg:d.message||''};
         });
         // Charger les réservations séance unique
-        var resaData=await sb.from('reservations_seance').select('*').eq('statut','attente').order('created_at');
+        var resaData=await sb.from('reservations_seance').select('*').in('statut',['attente','confirme']).order('created_at');
         if(resaData.data) RESERVATIONS_SEANCE=resaData.data;
       }
     }
@@ -2152,4 +2152,304 @@ function renderTStudents(){
     h+='<div class="card"><div style="font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Demandes d\'inscription</div>';
     INSCRIPTION_REQUESTS.forEach(function(req){
       var s=getStudent(req.studentId);var co=getCourse(req.courseId);var pk=getPack(req.packId);if(!s)return;
-      h+='<div class="req-row"><div class="req-info"><div class="req-name">'+s.prenom+' '+s.nom+'</div><div class="req-detail">'+co.nom+' · '+pk.nom+' ('+pk.prix+' €)<br>'+req.date+(req.msg?' — "'+req.msg+'"':'')+'</div></div><div class="req-actions"><button class="btn-approve" data-rid="'+req.id+'" onclick="approveIns(this.dataset.rid)">✓</button><button class="btn-reject" data-rid="'+req.id+'" onclick="rejectIns(this.dataset.rid)">✕</button></div></div>\';>
+      h+='<div class="req-row"><div class="req-info"><div class="req-name">'+s.prenom+' '+s.nom+'</div><div class="req-detail">'+co.nom+' · '+pk.nom+' ('+pk.prix+' €)<br>'+req.date+(req.msg?' — "'+req.msg+'"':'')+'</div></div><div class="req-actions"><button class="btn-approve" data-rid="'+req.id+'" onclick="approveIns(this.dataset.rid)">eject" onclick="rejectIns(\''+req.id+'\')">✕</button></div></div>';
+    });
+    h+='</div>';
+  }
+  // Réservations séances uniques
+  if(RESERVATIONS_SEANCE.length){
+    h+='<div class="card"><div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Réservations séance unique</div>';
+    RESERVATIONS_SEANCE.forEach(function(r){
+      var co=getCourse(r.cours_id);
+      var d=new Date(r.date+'T12:00:00');
+      var months=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+      var weekDays=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      var dateStr=weekDays[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()];
+      var stu=STUDENTS.find(function(s){return s.id===r.eleve_id;})||{prenom:'?',nom:'?'};
+      h+='<div class="req-row">'+
+        '<div class="req-info">'+
+          '<div class="req-name">'+stu.prenom+' '+stu.nom+'</div>'+
+          '<div class="req-detail">'+(co?co.nom:'?')+' · '+dateStr+' · '+r.montant+' €</div>'+
+        '</div>'+
+        '<div class="req-actions">'+
+          '<button class="btn-approve" data-rid="'+r.id+'" onclick="confirmResa(this.dataset.rid)">✓</button>'+
+          '<button class="btn-reject" data-rid="'+r.id+'" onclick="rejectResa(this.dataset.rid)">✕</button>'+
+        '</div>'+
+      '</div>';
+    });
+    h+='</div>';
+  }
+  if(!total)h+='<div class="card" style="text-align:center;padding:1rem;font-size:1.1rem;color:var(--muted);font-style:italic">Aucune demande en attente</div>';
+  h+='<div class="sec-h" style="margin-top:1.2rem"><h2>Élèves ('+STUDENTS.length+')</h2></div>';
+  STUDENTS.forEach(function(s,i){
+    var aH=s.photo?'<img src="'+s.photo+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>':ini(s);
+    var tr=s.inscriptions.reduce(function(a,ins){return ins.type==='illimite'?a:a+(ins.restant||0)},0);
+    var hu=s.inscriptions.some(function(ins){return ins.type==='illimite'});
+    h+='<div class="card clickable" onclick="openStudentProfile('+i+')"><div style="display:flex;align-items:center;gap:.8rem"><div class="av" style="width:40px;height:40px;font-size:1.1rem;flex-shrink:0;'+(s.photo?'padding:0':'')+'">'+aH+'</div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:1.05rem;font-weight:600">'+s.prenom+' '+s.nom+'</div><span class="badge '+(s.st==='Actif'?'bg-green':'bg-red')+'">'+s.st+'</span></div><div class="card-sub">'+s.inscriptions.length+' cours · '+(hu?'<span style="color:#A569BD">∞ illimité</span> ':'')+( tr>0?'<span style="color:var(--gold)">'+tr+' séances</span>':(hu?'':'<span style="color:#E05555">épuisé</span>'))+'</div></div></div></div>';
+  });
+  return h;
+}
+
+// ── STUDENT PAGES ──
+function sPage(p){
+  ['feed','courses','profs','qr','profile'].forEach(function(x){var b=document.getElementById('sn-'+x);if(b)b.className='nb'+(x===p?' on':'')});
+  var el=document.getElementById('s-page');
+  var s=STUDENTS[LOGGED_STUDENT]||CURRENT_PROFILE||{};
+  if(p==='feed')el.innerHTML=renderFeed(false);
+  else if(p==='courses'){
+    // S'assurer que s est à jour avec les inscriptions
+    if(CURRENT_PROFILE&&CURRENT_PROFILE.id){
+      s=CURRENT_PROFILE;
+      // Synchroniser STUDENTS[0]
+      if(!STUDENTS[0]||STUDENTS[0].id!==CURRENT_PROFILE.id) STUDENTS[0]=CURRENT_PROFILE;
+    }
+    el.innerHTML=renderSCourses(s);
+    setTimeout(function(){
+      el.querySelectorAll('[data-cid]').forEach(function(card){
+        card.addEventListener('click',function(e){if(!e.target.closest('button'))openCoursDetail(this.dataset.cid);});
+      });
+    },0);
+  }
+  else if(p==='profs')el.innerHTML=renderSProfs();
+  else if(p==='qr'){
+    var qrStudent=CURRENT_PROFILE||s;
+    el.innerHTML=renderSQR(qrStudent);
+    setTimeout(function(){
+      var qrId=qrStudent.id||(CURRENT_USER&&CURRENT_USER.id)||'unknown';
+      generateQR('student-qr-box','RC:'+qrId+':'+qrStudent.prenom+' '+qrStudent.nom);
+    },100);
+  }
+  else if(p==='profile')el.innerHTML=renderSProfile(s);
+}
+function renderSProfs(){
+  var h='<div class="sec-h"><h2>Notre équipe</h2></div>';
+  PROFS.forEach(function(pr){
+    var cours=COURSES.filter(function(c){return c.profId===pr.id});
+    h+='<div class="prof-card">'+
+      '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:.75rem">'+
+        '<div class="prof-av" style="width:72px;height:72px;font-size:1.5rem;flex-shrink:0;'+(pr.photo?'padding:0':'')+'">'+( pr.photo?'<img src="'+pr.photo+'" alt=""/>':ini(pr))+'</div>'+
+        '<div style="flex:1"><div style="font-size:1.05rem;font-weight:700;margin-bottom:.2rem">'+pr.prenom+' '+pr.nom+'</div>'+
+        '<div>'+pr.styles.map(function(s){return'<span class="prof-chip">'+s+'</span>'}).join('')+'</div></div>'+
+      '</div>'+
+      (pr.desc?'<div style="font-size:1.1rem;color:var(--muted2);line-height:1.55;margin-bottom:.75rem">'+pr.desc+'</div>':'')+
+      (cours.length?'<div style="border-top:1px solid var(--border);padding-top:.65rem"><div style="font-size:1.05rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem">Cours animés</div>'+cours.map(function(c){return'<div style="font-size:1.1rem;padding:.2rem 0;color:var(--muted2)">· '+c.nom+' <span style="color:var(--accent3)">'+c.jour+' '+c.heure.replace(':','h')+'</span></div>'}).join('')+'</div>':'')+
+    '</div>';
+  });
+  if(!PROFS.length)h+='<div class="empty">Aucun professeur enregistré.</div>';
+  return h;
+}
+function switchCoursTab(btn){
+  S_COURS_TAB=btn.dataset.tab;
+  sPage('courses');
+}
+
+function renderSCourses(s){
+  if(!s) return '<div class="empty">Chargement...</div>';
+  var sid=s.id||(CURRENT_USER&&CURRENT_USER.id)||'';
+  var pendingIds=INSCRIPTION_REQUESTS.filter(function(r){return r.studentId===sid}).map(function(r){return r.courseId});
+  var nivMap={'Débutant':'bg-green','Intermédiaire':'bg-gold','Avancé':'bg-blue','Tous niveaux':'bg-muted'};
+  var activeSt='background:var(--accent);color:white;border:none;';
+  var inactiveSt='background:transparent;color:var(--muted);border:none;';
+
+  // ── Toggle ──
+  var h='<div style="display:flex;gap:4px;background:rgba(0,0,0,0.3);border-radius:8px;padding:4px;border:1px solid var(--border);margin-bottom:1rem">'+
+    '<button data-tab="mes_cours" onclick="switchCoursTab(this)" style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='mes_cours'?activeSt:inactiveSt)+'">Mes cours</button>'+
+    '<button data-tab="tous" onclick="switchCoursTab(this)" style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='tous'?activeSt:inactiveSt)+'">Tous les cours</button>'+
+  '</div>';
+
+  var myInscriptions=(s&&s.inscriptions)?s.inscriptions:[];
+  if(S_COURS_TAB==='mes_cours'){
+    if(!myInscriptions.length){
+      h+='<div class="empty">Aucune inscription.<br>Consultez "Tous les cours".</div>';
+    } else {
+      myInscriptions.forEach(function(ins){
+        var co=getCourse(ins.courseId);
+        if(!co||!co.nom) return;
+        var prof=getProf(co.profId);
+        var next=getNextSession(co);
+        var hFin='';
+        if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
+        var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
+        var diffLabel=next?(next.diff===0?'Aujourd\'hui':next.diff===1?'Demain':'Dans '+next.diff+' jours'):'—';
+        var seancesInfo='';
+        if(ins.type==='illimite') seancesInfo='Illimité';
+        else if(ins.restant!==undefined) seancesInfo=ins.restant+' séance'+(ins.restant>1?'s':'')+' restante'+(ins.restant>1?'s':'');
+        h+='<div data-cid="'+co.id+'" onclick="openCoursDetail(this.dataset.cid)" style="cursor:pointer;background:linear-gradient(135deg,rgba(42,127,232,0.15),rgba(42,127,232,0.05));border:1px solid rgba(42,127,232,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:.75rem">'+
+          '<div style="display:flex;align-items:center;gap:.9rem">'+
+            '<div style="text-align:center;min-width:52px">'+
+              (next?'<div style="font-family:Bebas Neue,sans-serif;font-size:2rem;color:var(--accent);line-height:1">'+next.date+'</div><div style="font-size:.7rem;color:var(--muted)">'+next.jour+'</div>':'<div style="font-size:.7rem;color:var(--muted)">—</div>')+
+            '</div>'+
+            '<div style="width:1px;height:44px;background:rgba(42,127,232,0.2)"></div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:1rem;font-weight:700;color:var(--white)">'+co.nom+'</div>'+
+              '<div style="font-size:.78rem;color:var(--muted2);margin-top:.1rem">'+horaire+(prof?' · '+prof.prenom:'')+(seancesInfo?' · <span style="color:'+(ins.restant===0?'#E05555':'var(--gold)')+'">'+seancesInfo+'</span>':'')+' </div>'+
+              '<div style="font-size:.8rem;color:var(--accent2);margin-top:.25rem;font-weight:600">'+diffLabel+'</div>'+
+            '</div>'+
+            '<div style="color:var(--muted2);font-size:1.3rem">›</div>'+
+          '</div>'+
+        '</div>';
+      });
+      if(pendingIds.length){
+        h+='<div class="card" style="border-color:rgba(244,162,97,0.2);margin-top:.5rem"><div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem">En attente</div>'+
+          pendingIds.map(function(cid){var co=getCourse(cid);return co?'<div style="font-size:.82rem;color:var(--muted2)">· '+co.nom+' <span class="pending-badge">En attente</span></div>':''}).join('')+'</div>';
+      }
+    }
+
+    // ── Réservations séances uniques ──
+    var resasEleve=sid?RESERVATIONS_SEANCE.filter(function(r){return r.eleve_id===sid&&r.statut!=='annule';}):[];
+    if(resasEleve.length){
+      var months2=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+      var weekDays2=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      resasEleve.forEach(function(r){
+        var co=getCourse(r.cours_id);
+        if(!co) return;
+        var prof=getProf(co.profId);
+        var d=new Date(r.date+'T12:00:00');
+        var dateStr=weekDays2[d.getDay()]+' '+d.getDate()+' '+months2[d.getMonth()];
+        var hFin='';
+        if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
+        var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
+        var isConfirme=r.statut==='confirme';
+        var isRefuse=r.statut==='refuse';
+        var isAttente=r.statut==='attente';
+        var borderCol=isConfirme?'rgba(39,174,96,0.25)':'rgba(244,162,97,0.25)';
+        var bgCol=isConfirme?'linear-gradient(135deg,rgba(39,174,96,0.12),rgba(39,174,96,0.04))':'linear-gradient(135deg,rgba(244,162,97,0.1),rgba(244,162,97,0.03))';
+        var dateColor=isConfirme?'#27AE60':'var(--gold)';
+        var badgeLabel='Cours à l\'unité · '+dateStr+(isConfirme?' · ✓ Confirmé':' · ⏳ En attente');
+        var badgeBg=isConfirme?'rgba(39,174,96,0.15)':'rgba(244,162,97,0.12)';
+        var badgeBorder=isConfirme?'rgba(39,174,96,0.3)':'rgba(244,162,97,0.3)';
+        var badgeColor=isConfirme?'#27AE60':'var(--gold)';
+        h+='<div style="background:'+bgCol+';border:1px solid '+borderCol+';border-radius:14px;padding:1rem 1.2rem;margin-bottom:.75rem">'+
+          '<div style="display:flex;align-items:center;gap:.9rem">'+
+            '<div style="text-align:center;min-width:52px">'+
+              '<div style="font-family:Bebas Neue,sans-serif;font-size:1.8rem;color:'+dateColor+';line-height:1">'+d.getDate()+'</div>'+
+              '<div style="font-size:.7rem;color:'+dateColor+';font-weight:600">'+months2[d.getMonth()].toUpperCase()+'</div>'+
+              '<div style="font-size:.65rem;color:var(--muted)">'+weekDays2[d.getDay()]+'</div>'+
+            '</div>'+
+            '<div style="width:1px;height:48px;background:'+borderCol+'"></div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:1rem;font-weight:700;color:var(--white)">'+co.nom+'</div>'+
+              '<div style="font-size:.78rem;color:var(--muted2);margin-top:.1rem">'+horaire+(prof?' · '+prof.prenom:'')+'</div>'+
+              '<div style="margin-top:.3rem"><span style="font-size:.65rem;background:'+badgeBg+';color:'+badgeColor+';padding:2px 7px;border-radius:3px;font-weight:600;border:1px solid '+badgeBorder+'">'+badgeLabel+'</span></div>'+
+              (isRefuse&&r.note?'<div style="margin-top:.4rem;font-size:.78rem;color:#E05555;font-style:italic">Motif : '+r.note+'</div>':'')+
+              (isRefuse?'<button data-rid="'+r.id+'" onclick="dismissRefusedResa(this.dataset.rid)" style="margin-top:.5rem;padding:.3rem .8rem;border-radius:5px;border:1px solid rgba(220,50,50,0.3);background:rgba(220,50,50,0.1);color:#E05555;cursor:pointer;font-family:Outfit,sans-serif;font-size:.72rem;font-weight:600">Supprimer</button>':'')+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      });
+    }
+  } else {
+    // ── Tous les cours ──
+    if(!COURSES.length){
+      h+='<div class="empty">Aucun cours disponible.</div>';
+    } else {
+      COURSES.forEach(function(co){
+        var prof=getProf(co.profId);
+        var next=getNextSession(co);
+        var dispo=co.places-(co.inscrits||0);
+        var alreadyIn=myInscriptions.some(function(ins){return ins.courseId===co.id;});
+        var hasPending=pendingIds.indexOf(co.id)>=0;
+        var hFin='';
+        if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
+        var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
+        var diffLabel=next?(next.diff===0?'Aujourd\'hui':next.diff===1?'Demain':'Dans '+next.diff+' jours'):'—';
+        var borderCol=alreadyIn?'rgba(42,127,232,0.25)':dispo===0?'rgba(220,50,50,0.2)':'rgba(255,255,255,0.08)';
+        var bgCol=alreadyIn?'linear-gradient(135deg,rgba(42,127,232,0.12),rgba(42,127,232,0.04))':'rgba(255,255,255,0.02)';
+        h+='<div data-cid="'+co.id+'" onclick="openCoursDetail(this.dataset.cid)" style="cursor:pointer;background:'+bgCol+';border:1px solid '+borderCol+';border-radius:14px;padding:1rem 1.2rem;margin-bottom:.75rem">'+
+          '<div style="display:flex;align-items:center;gap:.9rem">'+
+            '<div style="text-align:center;min-width:52px">'+
+              (next?'<div style="font-family:Bebas Neue,sans-serif;font-size:2rem;color:'+(dispo===0?'#E05555':'var(--accent)')+';line-height:1">'+next.date+'</div><div style="font-size:.7rem;color:var(--muted)">'+next.jour+'</div>':'<div style="font-size:.7rem;color:var(--muted)">—</div>')+
+            '</div>'+
+            '<div style="width:1px;height:44px;background:var(--border)"></div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:1rem;font-weight:700;color:var(--white)">'+co.nom+'</div>'+
+              '<div style="font-size:.78rem;color:var(--muted2);margin-top:.1rem">'+horaire+(prof?' · '+prof.prenom:'')+'</div>'+
+              '<div style="font-size:.8rem;margin-top:.25rem;font-weight:600;color:'+(alreadyIn?'var(--accent2)':dispo===0?'#E05555':'#27AE60')+'">'+
+                (alreadyIn?'✓ Inscrit':hasPending?'En attente':dispo===0?'Complet':diffLabel)+
+              '</div>'+
+            '</div>'+
+            '<span class="badge '+(alreadyIn?'bg-blue':hasPending?'bg-gold':dispo===0?'bg-red':'bg-green')+'" style="flex-shrink:0">'+
+              (alreadyIn?'Inscrit':hasPending?'Attente':dispo===0?'Complet':'Disponible')+
+            '</span>'+
+          '</div>'+
+        '</div>';
+      });
+    }
+  }
+  return h;
+}
+
+
+function renderSQR(s){
+  return'<div class="qr-display-wrap"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:1.8rem;letter-spacing:.06em;color:var(--accent);margin-bottom:.3rem">Mon QR Code</div>'+
+    '<div style="font-size:1rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.3rem">À présenter avant chaque cours</div>'+
+    '<div id="student-qr-box"></div>'+
+    '<div style="font-size:1.05rem;font-weight:600;margin-bottom:.2rem">'+s.prenom+' '+s.nom+'</div>'+
+    '<div style="font-size:1rem;color:var(--muted);margin-bottom:.9rem">'+s.id+'</div>'+
+    '<div>'+s.inscriptions.map(function(ins){var co=getCourse(ins.courseId);return'<span class="chip">'+co.jour+' · '+co.nom+'</span>'}).join('')+'</div>'+
+    '<div style="margin-top:.9rem;padding:.65rem 1rem;background:var(--bg2);border-radius:8px;border:1px solid var(--border);display:inline-block;font-size:1.1rem;color:var(--muted2)">Séances restantes : <span style="color:var(--gold);font-weight:700">'+s.inscriptions.reduce(function(a,i){return i.type==='illimite'?a:a+(i.restant||0)},0)+'</span></div></div>';
+}
+function renderSProfile(s){
+  var aH=s.photo?'<img src="'+s.photo+'" alt=""/>':ini(s);
+  return'<div style="text-align:center;padding:1.5rem 0 1rem">'+
+    '<div class="profile-av-big" style="margin:0 auto .9rem;width:72px;height:72px;font-size:1.5rem;'+(s.photo?'padding:0':'')+'">'+aH+'</div>'+
+    '<div style="font-size:1.1rem;font-weight:700">'+s.prenom+' '+s.nom+'</div>'+
+    '<div style="font-size:1.1rem;color:var(--muted);margin:.2rem 0">'+s.id+'</div>'+
+    '<span class="badge '+(s.st==='Actif'?'bg-green':'bg-red')+'">'+s.st+'</span></div>'+
+    '<div class="stat-grid"><div class="stat-box"><div class="stat-n">'+s.inscriptions.length+'</div><div class="stat-l">Cours</div></div><div class="stat-box"><div class="stat-n" style="color:var(--gold)">'+s.montant+' €</div><div class="stat-l">Réglé</div></div></div>'+
+    '<div class="card">'+[['Email',s.email],['Téléphone',s.tel||'—'],['Naissance',s.dob||'—'],['Niveau',s.niveau]].map(function(r){return'<div class="info-row"><span class="info-label">'+r[0]+'</span><span style="font-size:1rem">'+r[1]+'</span></div>'}).join('')+'</div>'+
+    '<button class="btn-add" style="width:100%;justify-content:center;padding:.65rem;font-size:1.1rem;margin-bottom:.6rem" onclick="openMod(\'editownprofile\')">✏ Modifier mes informations</button>'+
+    '<button class="btn-primary" style="font-size:1.1rem;background:transparent;border:1px solid rgba(42,127,232,0.3);color:var(--accent);box-shadow:none" onclick="doLogout()">Se déconnecter</button>';
+}
+</script>
+
+
+<script>
+(function(){
+  var m={name:"Resu.Crew",short_name:"Resu.Crew",description:"Resu.Crew - École de danse",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
+    icons:[
+      {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%232A7FE8'/%3E%3Ctext x='96' y='130' font-family='Arial' font-size='90' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml",purpose:"any maskable"},
+      {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='60' fill='%232A7FE8'/%3E%3Ctext x='256' y='340' font-family='Arial' font-size='240' font-weight='bold' text-anchor='middle' fill='white'%3ERC%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml",purpose:"any maskable"}
+    ]
+  };
+  var el=document.getElementById('rc-manifest');
+  if(el)el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/json'}));
+
+  // Service worker: requires HTTPS hosting (Netlify) - not available in standalone file mode
+
+  var deferredPrompt=null;
+  window.addEventListener('beforeinstallprompt',function(e){
+    e.preventDefault();
+    deferredPrompt=e;
+    setTimeout(function(){
+      if(deferredPrompt&&!localStorage.getItem('rc-installed')){
+        var b=document.createElement('div');
+        b.id='install-banner';
+        b.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(10,14,26,0.97);border:1px solid rgba(42,127,232,0.4);border-radius:12px;padding:.85rem 1.2rem;display:flex;align-items:center;gap:.9rem;z-index:8000;backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,0.5);max-width:320px;width:90%';
+        b.innerHTML='<div style="font-size:1.6rem">&#128241;</div>'+
+          '<div style="flex:1"><div style="font-size:1rem;font-weight:600;color:#EEF2FF">Installer l&#39;app</div>'+
+          '<div style="font-size:1rem;color:#6B7699;margin-top:.15rem">Acc&#232;s rapide depuis l&#39;&#233;cran d&#39;accueil</div></div>'+
+          '<button onclick="rcInstall()" style="padding:.45rem .85rem;border-radius:6px;border:none;background:#2A7FE8;color:white;font-family:Outfit,sans-serif;font-size:1.05rem;font-weight:600;cursor:pointer">Installer</button>'+
+          '<button onclick="document.getElementById(&quot;install-banner&quot;).remove()" style="background:none;border:none;color:#6B7699;cursor:pointer;font-size:1.2rem;padding:0;line-height:1">&times;</button>';
+        document.body.appendChild(b);
+      }
+    },3000);
+  });
+  window.rcInstall=function(){
+    if(deferredPrompt){
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(r){
+        if(r.outcome==='accepted')localStorage.setItem('rc-installed','1');
+        var b=document.getElementById('install-banner');if(b)b.remove();
+        deferredPrompt=null;
+      });
+    }
+  };
+  window.addEventListener('appinstalled',function(){
+    var b=document.getElementById('install-banner');if(b)b.remove();
+    localStorage.setItem('rc-installed','1');
+  });
+})();
+</script>
+</body>
+</html>

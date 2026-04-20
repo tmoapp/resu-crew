@@ -357,7 +357,7 @@ select.inp option{background:#0d1120}textarea.inp{resize:vertical;min-height:80p
 // ════════════════════════════════════════════════
 // ⚙️  CONFIGURATION — Remplissez vos clés Supabase
 // ════════════════════════════════════════════════
-var SUPABASE_URL = 'https://yfkirciucifehzthoaqe.supabase.coVOTRE_URL_SUPABASE'; // ex: https://xxxx.supabase.co
+var SUPABASE_URL = 'https://yfkirciucifehzthoaqe.supabase.co'; // ex: https://xxxx.supabase.co
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlma2lyY2l1Y2lmZWh6dGhvYXFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MzQyMzEsImV4cCI6MjA5MTUxMDIzMX0.idwJyAgfj92K8Icst9zGOOkwZfHgliJDEbkOkp6oCyw';     // clé anon/public de Settings > API
 
 var sb = null;
@@ -1019,71 +1019,6 @@ function openMod(type,idx){
 function rejectIns(reqId){var i=INSCRIPTION_REQUESTS.findIndex(function(r){return r.id===reqId});if(i>=0){INSCRIPTION_REQUESTS.splice(i,1);toast('Refus\u00e9e');tPage('students')}}
 
 }
-function closeMod(){document.getElementById('mod-ov').classList.remove('open')}
-document.getElementById('mod-ov').addEventListener('click',function(e){if(e.target===this)closeMod()});
-function selPack(el,val){document.querySelectorAll('.pack-option').forEach(function(x){x.classList.remove('selected')});el.classList.add('selected')}
-
-async function saveCourse(){
-  var nom=document.getElementById('f-nom').value.trim();if(!nom){toast('Nom requis','err');return}
-  var selPacks=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
-  var profId=document.getElementById('f-prof').value||null;
-  var row={nom:nom,style:document.getElementById('f-style').value,prof_id:profId||null,jour:document.getElementById('f-jour').value,heure:document.getElementById('f-h').value,duree_min:parseInt(document.getElementById('f-d').value)||90,places_max:parseInt(document.getElementById('f-p').value)||12,niveau:document.getElementById('f-niv').value,packs_ids:selPacks,tarif_seance:(document.getElementById('f-tarif-seance')&&document.getElementById('f-tarif-seance').value?parseFloat(document.getElementById('f-tarif-seance').value):null)};
-  var local={id:EDIT_IDX>=0?COURSES[EDIT_IDX].id:uid(),nom:row.nom,style:row.style,profId:profId,jour:row.jour,heure:row.heure,duree:row.duree_min,places:row.places_max,inscrits:EDIT_IDX>=0?COURSES[EDIT_IDX].inscrits:0,niveau:row.niveau,packs:selPacks,tarif_seance:row.tarif_seance};
-  if(SUPABASE_READY){
-    if(EDIT_IDX>=0){var res=await sbUpdate('cours',COURSES[EDIT_IDX].id,row);if(res){COURSES[EDIT_IDX]=local;toast('Cours modifié ✓')}}
-    else{var res=await sbInsert('cours',row);if(res){local.id=res.id;COURSES.push(local);toast('Cours créé ✓')}}
-  }else{
-    if(EDIT_IDX>=0){COURSES[EDIT_IDX]=local;toast('Cours modifié ✓')}else{COURSES.push(local);toast('Cours créé ✓')}
-  }
-  closeMod();tPage('courses');
-}
-
-async function savePack(){
-  var nom=document.getElementById('pk-nom').value.trim();if(!nom){toast('Nom requis','err');return}
-  var type=document.getElementById('pk-type').value;
-  var row={nom:nom,type:type,nb_seances:type==='illimite'?null:parseInt(document.getElementById('pk-seances').value)||10,prix:parseFloat(document.getElementById('pk-prix').value)||0};
-  var local={id:EDIT_IDX>=0?PACKS[EDIT_IDX].id:uid(),nom:row.nom,type:row.type,seances:row.nb_seances,prix:row.prix};
-  if(SUPABASE_READY){
-    if(EDIT_IDX>=0){var res=await sbUpdate('packs',PACKS[EDIT_IDX].id,row);if(res){PACKS[EDIT_IDX]=local;toast('Pack modifié ✓')}}
-    else{var res=await sbInsert('packs',row);if(res){local.id=res.id;PACKS.push(local);toast('Pack créé ✓')}}
-  }else{
-    if(EDIT_IDX>=0){PACKS[EDIT_IDX]=local;toast('Pack modifié ✓')}else{PACKS.push(local);toast('Pack créé ✓')}
-  }
-  closeMod();tPage('courses');
-}
-
-async function savePost(){
-  var titre=document.getElementById('f-post-titre').value.trim();if(!titre){toast('Titre requis','err');return}
-  var mediaSrc=document.getElementById('post-media-src').value;
-  var isVid=MEDIA_TYPE==='video';
-  var desc=document.getElementById('f-post-desc').value.trim();
-  if(SUPABASE_READY&&CURRENT_USER){
-    var row={auteur_id:CURRENT_USER.id,titre:titre,description:desc,media_type:MEDIA_TYPE,media_url:isVid?null:(mediaSrc||null)};
-    var res=await sbInsert('posts',row);
-    if(res){POSTS.unshift({id:res.id,author:(CURRENT_PROFILE?CURRENT_PROFILE.prenom+' '+CURRENT_PROFILE.nom:'Prof'),authorInit:'RC',date:"À l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:isVid?null:(mediaSrc||null),bg:'#040810',em:'📸',likes:0,likedBy:[],comments:[],showComments:false});}
-  }else{
-    POSTS.unshift({id:uid(),author:'Prof',authorInit:'RC',date:"À l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:isVid?null:(mediaSrc||null),bg:'#040810',em:'📸',likes:0,likedBy:[],comments:[],showComments:false});
-  }
-  closeMod();tPage('feed');toast('Publication envoyée ✓');
-}
-
-async function saveProf(){
-  var pn=document.getElementById('pr-pn').value.trim(),nm=document.getElementById('pr-nm').value.trim();
-  if(!pn){toast('Prénom requis','err');return}
-  var styles=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
-  var photo=document.getElementById('prof-photo-data').value||null;
-  var row={prenom:pn,nom:nm,photo_url:photo,styles:styles,description:document.getElementById('pr-desc').value.trim()};
-  if(SUPABASE_READY){
-    if(EDIT_IDX>=0){var res=await sbUpdate('profs',PROFS[EDIT_IDX].id,row);if(res){PROFS[EDIT_IDX]={...PROFS[EDIT_IDX],...row,id:PROFS[EDIT_IDX].id};toast('Profil modifié ✓')}}
-    else{var res=await sbInsert('profs',row);if(res){PROFS.push({id:res.id,...row,photo:photo,desc:row.description});toast('Professeur ajouté ✓')}}
-  }else{
-    var pr={id:EDIT_IDX>=0?PROFS[EDIT_IDX].id:uid(),prenom:pn,nom:nm,photo:photo,styles:styles,desc:row.description};
-    if(EDIT_IDX>=0){PROFS[EDIT_IDX]=pr;toast('Profil modifié ✓')}else{PROFS.push(pr);toast('Professeur ajouté ✓')}
-  }
-  closeMod();tPage('profs');
-}
-
-
 async function confirmResa(id){
   if(SUPABASE_READY){
     var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
@@ -1094,8 +1029,10 @@ async function confirmResa(id){
     });
     if(!r.ok){var t=await r.text();toast('Erreur '+r.status+': '+t,'err');console.error('[RC] confirmResa:',r.status,t);return;}
   }
-  // Retirer de la liste d'attente (confirmée = disparaît de la liste prof)
-  RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
+  // Mettre à jour le compteur de réservations confirmées (impact sur dispo)
+  var resa=RESERVATIONS_SEANCE.find(function(r){return r.id===id;});
+  if(resa) resa.statut='confirme';
+  else RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
   toast('Réservation confirmée ✓');
   tPage('students');
 }

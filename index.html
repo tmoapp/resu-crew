@@ -1016,7 +1016,35 @@ function openMod(type,idx){
       '<div class="notice" style="margin-top:.5rem;margin-bottom:0">Votre demande sera transmise au professeur. L\'inscription est confirmée après validation du paiement.</div>'+
       '<div class="modal-actions"><button class="btn-primary" style="flex:1" onclick="submitInsReq(\'+EDIT_IDX+\')">Envoyer la demande</button><button class="btn-cancel" onclick="closeMod()">Annuler</button></div>';
 }
-
+async function approveIns(reqId){
+  var req=INSCRIPTION_REQUESTS.find(function(r){return r.id===reqId});
+  if(!req) return;
+  var s=getStudent(req.studentId);
+  var pk=getPack(req.packId);
+  if(SUPABASE_READY){
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
+    if(pk){
+      var insRow={eleve_id:req.studentId,cours_id:req.courseId,pack_id:req.packId,type:pk.type,montant_paye:pk.prix};
+      if(pk.type==='illimite'){insRow.seances_assistees=0;}else{insRow.seances_restantes=pk.seances;insRow.seances_total=pk.seances;}
+      await sbInsert('inscriptions',insRow);
+    }
+    await fetch(SUPABASE_URL+'/rest/v1/demandes_inscription?id=eq.'+req.id,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
+      body:JSON.stringify({statut:'validee'})
+    });
+  }
+  if(s&&pk){
+    var e={courseId:req.courseId,packId:req.packId,type:pk.type,paye:pk.prix};
+    if(pk.type==='illimite'){e.assiste=0;}else{e.restant=pk.seances;e.total=pk.seances;}
+    s.inscriptions.push(e);s.montant+=pk.prix;
+  }
+  var co=getCourse(req.courseId);
+  if(co) co.inscrits=(co.inscrits||0)+1;
+  INSCRIPTION_REQUESTS=INSCRIPTION_REQUESTS.filter(function(r){return r.id!==reqId;});
+  toast('Inscription validée ✓');
+  tPage('students');
+}
 
 function rejectIns(reqId){var i=INSCRIPTION_REQUESTS.findIndex(function(r){return r.id===reqId});if(i>=0){INSCRIPTION_REQUESTS.splice(i,1);toast('Refus\u00e9e');tPage('students')}}
 

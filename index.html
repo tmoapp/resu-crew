@@ -632,7 +632,7 @@ async function loadFromSupabase(){
           return{id:d.id,studentId:d.eleve_id,courseId:d.cours_id,packId:d.pack_id,date:new Date(d.created_at).toLocaleDateString('fr'),msg:d.message||''};
         });
         // Charger les réservations séance unique
-        var resaData=await sb.from('reservations_seance').select('*').in('statut',['attente','confirme']).order('created_at');
+        var resaData=await sb.from('reservations_seance').select('*').eq('statut','attente').order('created_at');
         if(resaData.data) RESERVATIONS_SEANCE=resaData.data;
       }
     }
@@ -707,7 +707,12 @@ async function doLogin(){
     reinitSbWithToken();
     CURRENT_USER=res.user;
     // Charger le profil
-    var {data:prof,error:profErr}=await sb.from('profiles').select('*').eq('id',res.user.id).single();
+    var profRes=await fetch(SUPABASE_URL+'/rest/v1/profiles?select=*&id=eq.'+res.user.id,{
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+RC_TOKEN,'Accept':'application/json'}
+    });
+    var profData=await profRes.json();
+    var prof=Array.isArray(profData)?profData[0]:null;
+    var profErr=!prof?{message:'Profil introuvable'}:null;
     if(profErr||!prof){toast('Profil introuvable — contactez le prof','err');return;}
     if(prof.statut==='attente'){toast('Compte en attente de validation par le professeur','err');return;}
     CURRENT_PROFILE=prof;
@@ -1016,35 +1021,8 @@ function openMod(type,idx){
       '<div class="notice" style="margin-top:.5rem;margin-bottom:0">Votre demande sera transmise au professeur. L\'inscription est confirmée après validation du paiement.</div>'+
       '<div class="modal-actions"><button class="btn-primary" style="flex:1" onclick="submitInsReq(\'+EDIT_IDX+\')">Envoyer la demande</button><button class="btn-cancel" onclick="closeMod()">Annuler</button></div>';
 }
-async function approveIns(reqId){
-  var req=INSCRIPTION_REQUESTS.find(function(r){return r.id===reqId});
-  if(!req) return;
-  var s=getStudent(req.studentId);
-  var pk=getPack(req.packId);
-  if(SUPABASE_READY){
-    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
-    if(pk){
-      var insRow={eleve_id:req.studentId,cours_id:req.courseId,pack_id:req.packId,type:pk.type,montant_paye:pk.prix};
-      if(pk.type==='illimite'){insRow.seances_assistees=0;}else{insRow.seances_restantes=pk.seances;insRow.seances_total=pk.seances;}
-      await sbInsert('inscriptions',insRow);
-    }
-    await fetch(SUPABASE_URL+'/rest/v1/demandes_inscription?id=eq.'+req.id,{
-      method:'PATCH',
-      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
-      body:JSON.stringify({statut:'validee'})
-    });
-  }
-  if(s&&pk){
-    var e={courseId:req.courseId,packId:req.packId,type:pk.type,paye:pk.prix};
-    if(pk.type==='illimite'){e.assiste=0;}else{e.restant=pk.seances;e.total=pk.seances;}
-    s.inscriptions.push(e);s.montant+=pk.prix;
-  }
-  var co=getCourse(req.courseId);
-  if(co) co.inscrits=(co.inscrits||0)+1;
-  INSCRIPTION_REQUESTS=INSCRIPTION_REQUESTS.filter(function(r){return r.id!==reqId;});
-  toast('Inscription validée ✓');
-  tPage('students');
 }
+function rejectIns(reqId){var i=INSCRIPTION_REQUESTS.findIndex(function(r){return r.id===reqId});if(i>=0){INSCRIPTION_REQUESTS.splice(i,1);toast('Refus\u00e9e');tPage('students')}}
 
 async function approveIns(reqId){
   var req=INSCRIPTION_REQUESTS.find(function(r){return r.id===reqId});
@@ -1072,13 +1050,14 @@ async function approveIns(reqId){
   var co=getCourse(req.courseId);
   if(co) co.inscrits=(co.inscrits||0)+1;
   INSCRIPTION_REQUESTS=INSCRIPTION_REQUESTS.filter(function(r){return r.id!==reqId;});
-  toast('Inscription validée ✓');
+  toast('Inscription valid\u00e9e \u2713');
   tPage('students');
 }
+
 async function approvePending(i){
   var p=PENDING_ACCOUNTS[i];
   if(SUPABASE_READY){
-    var token=await getBestToken();
+    var token=getBestToken();
     var r=await fetch(SUPABASE_URL+'/rest/v1/rpc/activate_profile',{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+token},
@@ -1090,14 +1069,15 @@ async function approvePending(i){
       headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+token,'Prefer':'return=minimal'},
       body:JSON.stringify({statut:'validee'})
     }).catch(function(){});
-    toast(p.prenom+' validé(e) ✓ — Peut maintenant se connecter','ok');
+    toast(p.prenom+' valid\u00e9(e) \u2713','ok');
   } else {
-    toast(p.prenom+' validé(e) ✓','ok');
+    toast(p.prenom+' valid\u00e9(e) \u2713','ok');
   }
-  STUDENTS.push({id:p.dbId||uid(),nom:p.nom,prenom:p.prenom,email:p.email,tel:p.tel||'',dob:p.dob||'',niveau:p.niveau||'Débutant',photo:p.photo,inscriptions:[],st:'Actif',montant:0});
+  STUDENTS.push({id:p.dbId||uid(),nom:p.nom,prenom:p.prenom,email:p.email,tel:p.tel||'',dob:p.dob||'',niveau:p.niveau||'D\u00e9butant',photo:p.photo,inscriptions:[],st:'Actif',montant:0});
   PENDING_ACCOUNTS.splice(i,1);
   tPage('students');
 }
+
 async function rejectPending(i){
   if(!confirm('Refuser et supprimer le compte de '+PENDING_ACCOUNTS[i].prenom+' '+PENDING_ACCOUNTS[i].nom+' ?'))return;
   var p=PENDING_ACCOUNTS[i];
@@ -1118,13 +1098,13 @@ async function rejectPending(i){
     }
   }
   PENDING_ACCOUNTS.splice(i,1);
-  toast('Demande refusée','ok');
+  toast('Demande refus\u00e9e','ok');
   tPage('students');
 }
+
 async function deleteStudent(i){
   if(!confirm('Supprimer le compte de '+STUDENTS[i].prenom+' '+STUDENTS[i].nom+' ?'))return;
   var sid=STUDENTS[i].id;
-  var email=STUDENTS[i].email;
   var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
   if(SUPABASE_READY){
     var h={'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'};
@@ -1139,9 +1119,10 @@ async function deleteStudent(i){
   }
   STUDENTS.splice(i,1);
   closeStudentProfile();
-  toast('Compte supprimé ✓');
+  toast('Compte supprim\u00e9 \u2713');
   tPage('students');
 }
+
 async function saveEditStudent(){
   var s=STUDENTS[EDIT_IDX];
   if(!s){closeMod();return;}
@@ -1154,7 +1135,7 @@ async function saveEditStudent(){
   var photoEl=document.getElementById('es-photo-data');
   var photoData=photoEl?photoEl.value:'';
   var photoUrl=s.photo_url||s.photo||null;
-  if(SUPABASE_READY){
+  if(SUPABASE_READY&&s.id){
     if(photoData&&photoData.startsWith('data:image')){
       try{
         var fetchRes=await fetch(photoData);var blob=await fetchRes.blob();
@@ -1170,13 +1151,14 @@ async function saveEditStudent(){
   }
   s.photo=photoUrl;s.photo_url=photoUrl;
   closeMod();
-  toast('Profil mis à jour ✓');
+  toast('Profil mis \u00e0 jour \u2713');
   if(document.getElementById('profile-ov').classList.contains('open')){openStudentProfile(EDIT_IDX);}
   else{tPage('students');}
 }
+
 async function saveOwnProfile(){
   var s=CURRENT_PROFILE;
-  if(!s||!CURRENT_USER){toast('Non connecté','err');return;}
+  if(!s||!CURRENT_USER){toast('Non connect\u00e9','err');return;}
   s.prenom=document.getElementById('es-pn').value.trim();
   s.nom=document.getElementById('es-nm').value.trim();
   s.tel=document.getElementById('es-tel').value;
@@ -1215,85 +1197,20 @@ async function saveOwnProfile(){
       });
       var d=await r.json();
       if(d.error){toast('Erreur mot de passe: '+d.error_description,'err');return;}
-      toast('Mot de passe mis à jour ✓');
+      toast('Mot de passe mis \u00e0 jour \u2713');
     }
   }
   s.photo=photoUrl;s.photo_url=photoUrl;
   if(CURRENT_PROFILE){CURRENT_PROFILE.prenom=s.prenom;CURRENT_PROFILE.nom=s.nom;CURRENT_PROFILE.photo=photoUrl;CURRENT_PROFILE.photo_url=photoUrl;}
   closeMod();
-  toast('Profil mis à jour ✓');
+  toast('Profil mis \u00e0 jour \u2713');
   updTopbar();updTeacherTopbar();
   if(ROLE==='eleve')sPage('profile');
 }
-async function saveCourse(){
-  var nom=document.getElementById('f-nom').value.trim();if(!nom){toast('Nom requis','err');return}
-  var selPacks=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
-  var profId=document.getElementById('f-prof').value||null;
-  var row={nom:nom,style:document.getElementById('f-style').value,prof_id:profId||null,jour:document.getElementById('f-jour').value,heure:document.getElementById('f-h').value,duree_min:parseInt(document.getElementById('f-d').value)||90,places_max:parseInt(document.getElementById('f-p').value)||12,niveau:document.getElementById('f-niv').value,packs_ids:selPacks,tarif_seance:(document.getElementById('f-tarif-seance')&&document.getElementById('f-tarif-seance').value?parseFloat(document.getElementById('f-tarif-seance').value):null)};
-  var local={id:EDIT_IDX>=0?COURSES[EDIT_IDX].id:uid(),nom:row.nom,style:row.style,profId:profId,jour:row.jour,heure:row.heure,duree:row.duree_min,places:row.places_max,inscrits:EDIT_IDX>=0?COURSES[EDIT_IDX].inscrits:0,niveau:row.niveau,packs:selPacks,tarif_seance:row.tarif_seance};
-  if(SUPABASE_READY){
-    if(EDIT_IDX>=0){var res=await sbUpdate('cours',COURSES[EDIT_IDX].id,row);if(res){COURSES[EDIT_IDX]=local;toast('Cours modifié ✓')}}
-    else{var res=await sbInsert('cours',row);if(res){local.id=res.id;COURSES.push(local);toast('Cours créé ✓')}}
-  }else{
-    if(EDIT_IDX>=0){COURSES[EDIT_IDX]=local;toast('Cours modifié ✓')}else{COURSES.push(local);toast('Cours créé ✓')}
-  }
-  closeMod();tPage('courses');
-}
-async function savePack(){
-  var nom=document.getElementById('pk-nom').value.trim();if(!nom){toast('Nom requis','err');return}
-  var type=document.getElementById('pk-type').value;
-  var row={nom:nom,type:type,nb_seances:type==='illimite'?null:parseInt(document.getElementById('pk-seances').value)||10,prix:parseFloat(document.getElementById('pk-prix').value)||0};
-  var local={id:EDIT_IDX>=0?PACKS[EDIT_IDX].id:uid(),nom:row.nom,type:row.type,seances:row.nb_seances,prix:row.prix};
-  if(SUPABASE_READY){
-    if(EDIT_IDX>=0){var res=await sbUpdate('packs',PACKS[EDIT_IDX].id,row);if(res){PACKS[EDIT_IDX]=local;toast('Pack modifié ✓')}}
-    else{var res=await sbInsert('packs',row);if(res){local.id=res.id;PACKS.push(local);toast('Pack créé ✓')}}
-  }else{
-    if(EDIT_IDX>=0){PACKS[EDIT_IDX]=local;toast('Pack modifié ✓')}else{PACKS.push(local);toast('Pack créé ✓')}
-  }
-  closeMod();tPage('courses');
-}
-async function savePost(){
-  var titre=document.getElementById('f-post-titre').value.trim();if(!titre){toast('Titre requis','err');return}
-  var mediaSrc=document.getElementById('post-media-src').value;
-  var isVid=MEDIA_TYPE==='video';
-  var desc=document.getElementById('f-post-desc').value.trim();
-  if(SUPABASE_READY&&CURRENT_USER){
-    var row={auteur_id:CURRENT_USER.id,titre:titre,description:desc,media_type:MEDIA_TYPE,media_url:isVid?null:(mediaSrc||null)};
-    var res=await sbInsert('posts',row);
-    if(res){POSTS.unshift({id:res.id,author:(CURRENT_PROFILE?CURRENT_PROFILE.prenom+' '+CURRENT_PROFILE.nom:'Prof'),authorInit:'RC',date:"À l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:isVid?null:(mediaSrc||null),bg:'#040810',em:'📸',likes:0,likedBy:[],comments:[],showComments:false});}
-  }else{
-    POSTS.unshift({id:uid(),author:'Prof',authorInit:'RC',date:"À l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:isVid?null:(mediaSrc||null),bg:'#040810',em:'📸',likes:0,likedBy:[],comments:[],showComments:false});
-  }
-  closeMod();tPage('feed');toast('Publication envoyée ✓');
-}
-async function saveProf(){
-  var pn=document.getElementById('pr-pn').value.trim(),nm=document.getElementById('pr-nm').value.trim();
-  if(!pn){toast('Prénom requis','err');return}
-  var styles=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
-  var photo=document.getElementById('prof-photo-data').value||null;
-  var row={prenom:pn,nom:nm,photo_url:photo,styles:styles,description:document.getElementById('pr-desc').value.trim()};
-  if(SUPABASE_READY){
-    if(EDIT_IDX>=0){var res=await sbUpdate('profs',PROFS[EDIT_IDX].id,row);if(res){PROFS[EDIT_IDX]={...PROFS[EDIT_IDX],...row,id:PROFS[EDIT_IDX].id};toast('Profil modifié ✓')}}
-    else{var res=await sbInsert('profs',row);if(res){PROFS.push({id:res.id,...row,photo:photo,desc:row.description});toast('Professeur ajouté ✓')}}
-  }else{
-    var pr={id:EDIT_IDX>=0?PROFS[EDIT_IDX].id:uid(),prenom:pn,nom:nm,photo:photo,styles:styles,desc:row.description};
-    if(EDIT_IDX>=0){PROFS[EDIT_IDX]=pr;toast('Profil modifié ✓')}else{PROFS.push(pr);toast('Professeur ajouté ✓')}
-  }
-  closeMod();tPage('profs');
-}
-async function deleteProf(i){
-  if(!confirm('Supprimer ce professeur ?'))return;
-  if(SUPABASE_READY){var ok=await sbDelete('profs',PROFS[i].id);if(!ok)return;}
-  PROFS.splice(i,1);toast('Profil supprimé');tPage('profs');
-}
-async function deletePost(i){
-  if(!confirm('Supprimer ?'))return;
-  if(SUPABASE_READY&&POSTS[i].id){var ok=await sbDelete('posts',POSTS[i].id);if(!ok)return;}
-  POSTS.splice(i,1);ROLE==='prof'?tPage('feed'):sPage('feed');
-}
+
 async function saveNewStudent(){
   var pn=document.getElementById('ns-pn').value.trim(),nm=document.getElementById('ns-nm').value.trim();
-  if(!pn||!nm){toast('Prénom et nom requis','err');return}
+  if(!pn||!nm){toast('Pr\u00e9nom et nom requis','err');return}
   var email=document.getElementById('ns-em').value.trim();
   var tel=document.getElementById('ns-tel').value.trim();
   var dob=document.getElementById('ns-dob').value||null;
@@ -1304,72 +1221,20 @@ async function saveNewStudent(){
     var tempPw='RC'+Math.random().toString(36).slice(2,10)+'!A1';
     var suRes=await rcSignUp(email,tempPw,{prenom:pn,nom:nm,tel:tel||'',niveau:niveau});
     if(suRes.error){toast('Erreur: '+suRes.error,'err');return;}
-    var uid2=suRes.user?suRes.user.id:null;
-    if(uid2){
-      await sb.from('profiles').upsert({id:uid2,role:'eleve',prenom:pn,nom:nm,email:email,tel:tel||'',dob:dob||null,niveau:niveau,photo_url:photo,statut:'actif'});
-      try{await sb.rpc('confirm_user_email',{user_id:uid2});}catch(e){console.warn('confirm:',e);}
-      STUDENTS.push({id:uid2,nom:nm,prenom:pn,email:email,tel:tel||'',dob:dob||'',niveau:niveau,photo:photo,inscriptions:[],st:'Actif',montant:0});
+    var newUid=suRes.user?suRes.user.id:null;
+    if(newUid){
+      await sb.from('profiles').upsert({id:newUid,role:'eleve',prenom:pn,nom:nm,email:email,tel:tel||'',dob:dob||null,niveau:niveau,photo_url:photo,statut:'actif'});
+      try{await sb.rpc('confirm_user_email',{user_id:newUid});}catch(e){console.warn('confirm:',e);}
+      STUDENTS.push({id:newUid,nom:nm,prenom:pn,email:email,tel:tel||'',dob:dob||'',niveau:niveau,photo:photo,inscriptions:[],st:'Actif',montant:0});
     }
-    closeMod();
-    var appUrl='https://'+window.location.host+window.location.pathname;
-    var msg='Bonjour '+pn+',\n\nVoici tes accès pour l\'app Resu.Crew :\n\nURL : '+appUrl+'\nEmail : '+email+'\nMot de passe : '+tempPw+'\n\nConnecte-toi et modifie ton mot de passe depuis ton profil.\n\nÀ bientôt !';
-    var box=document.createElement('div');
-    box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
-    box.innerHTML='<div style="background:#111525;border-radius:14px 14px 0 0;padding:1.5rem;width:100%;max-width:500px;border-top:1px solid rgba(42,127,232,0.3)"><div style="font-size:1.1rem;font-weight:700;color:#EEF2FF;margin-bottom:.4rem">Compte créé ✓</div><div style="font-size:1.05rem;color:#6B7699;margin-bottom:.8rem">Partagez ces identifiants avec '+pn+' par SMS ou WhatsApp</div><pre style="background:#0d1020;border:1px solid rgba(42,127,232,0.2);border-radius:8px;padding:.9rem;font-size:1.05rem;line-height:1.8;color:#9BA5CC;white-space:pre-wrap;margin-bottom:1rem;word-break:break-all;font-family:monospace">'+msg+'</pre><div style="display:flex;gap:.6rem;margin-bottom:.5rem"><button onclick="navigator.clipboard.writeText(\''+msg.replace(/'/g,"\\'").replace(/\n/g,'\\n')+'\').then(function(){this.textContent=\'Copié ✓\'}.bind(this))" style="flex:1;padding:.75rem;border-radius:6px;border:none;background:#2A7FE8;color:white;font-family:Outfit,sans-serif;font-size:1rem;font-weight:600;cursor:pointer">Copier le message</button><button onclick="window.open(\'https://wa.me/?text=\'+encodeURIComponent(\''+msg.replace(/'/g,"\\'")+'\'),\'_blank\')" style="flex:1;padding:.75rem;border-radius:6px;border:1px solid rgba(42,127,232,0.3);background:transparent;color:#2A7FE8;font-family:Outfit,sans-serif;font-size:1rem;cursor:pointer">WhatsApp</button></div><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="width:100%;padding:.65rem;border-radius:6px;border:none;background:transparent;color:#6B7699;font-family:Outfit,sans-serif;font-size:1.1rem;cursor:pointer">Fermer</button></div>';
-    document.body.appendChild(box);
-    tPage('students');
+    closeMod();tPage('students');
+    toast('\u00c9l\u00e8ve cr\u00e9\u00e9 \u2713 — identifiants: '+email+' / '+tempPw,'info');
   }else{
     STUDENTS.push({id:'RC-'+pn[0].toUpperCase()+nm[0].toUpperCase()+'-'+Math.floor(Math.random()*900+100),nom:nm,prenom:pn,email:email,tel:tel||'',dob:dob||'',niveau:niveau,photo:photo,inscriptions:[],st:'Actif',montant:0});
-    closeMod();tPage('students');toast('Élève créé ✓');
+    closeMod();tPage('students');toast('\u00c9l\u00e8ve cr\u00e9\u00e9 \u2713');
   }
 }
-async function closeMod(){document.getElementById('mod-ov').classList.remove('open')}
-function selPack(el,val){document.querySelectorAll('.pack-option').forEach(function(x){x.classList.remove('selected')});el.classList.add('selected')}
-function setMediaType(t){
-  MEDIA_TYPE=t;
-  document.getElementById('mt-img').className='mt-btn'+(t==='image'?' on':'');
-  document.getElementById('mt-vid').className='mt-btn'+(t==='video'?' on':'');
-  document.getElementById('post-media-src').value='';
-  var z=document.getElementById('media-zone');
-  if(t==='image'){z.querySelector('div:first-child').textContent='🖼';z.querySelector('div:nth-child(2)').textContent='Cliquez pour choisir une image';z.querySelector('div:nth-child(3)').textContent='JPG, PNG, GIF'}
-  else{z.querySelector('div:first-child').textContent='🎬';z.querySelector('div:nth-child(2)').textContent='Cliquez pour choisir une vidéo';z.querySelector('div:nth-child(3)').textContent='MP4, MOV, AVI'}
-}
-function handleFileUpload(input){
-  var file=input.files[0];if(!file)return;
-  var isVideo=file.type.startsWith('video/');
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var dataUrl=e.target.result;
-    document.getElementById('post-media-src').value=dataUrl;
-    var zone=document.getElementById('media-zone');
-    if(zone){
-      if(isVideo){zone.innerHTML='<video src="'+dataUrl+'" style="width:100%;max-height:160px;border-radius:6px;object-fit:cover" muted playsinline></video><div style="font-size:1rem;color:var(--accent2);margin-top:.3rem">'+file.name+'</div>';}
-      else{zone.innerHTML='<img src="'+dataUrl+'" style="width:100%;max-height:160px;border-radius:6px;object-fit:cover"/><div style="font-size:1rem;color:var(--accent2);margin-top:.3rem">'+file.name+'</div>';}
-    }
-    toast((isVideo?'Vidéo':'Image')+' ajoutée ✓');
-  };
-  reader.readAsDataURL(file);
-}
-async function deleteCourseFromDetail(){
-  var id=CURRENT_COURS_DETAIL_ID;
-  if(!id){toast('Erreur: cours non identifié','err');return;}
-  closeCoursDetail();
-  await deleteCourse(id);
-}
-async function deleteCourse(id){
-  if(!confirm('Supprimer ce cours ? Cette action est irréversible.')) return;
-  if(SUPABASE_READY){
-    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
-    var r=await fetch(SUPABASE_URL+'/rest/v1/cours?id=eq.'+id,{
-      method:'DELETE',
-      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}
-    });
-    if(!r.ok){var t=await r.text();toast('Erreur '+r.status,'err');return;}
-  }
-  COURSES=COURSES.filter(function(co){return co.id!==id;});
-  toast('Cours supprimé ✓');
-  tPage('courses');
-}
+
 async function generateSeances(){
   if(!SUPABASE_READY||!COURSES.length) return;
   var today=new Date(); today.setHours(0,0,0,0);
@@ -1396,12 +1261,75 @@ async function generateSeances(){
     }
   }
 }
-function rejectIns(reqId){var i=INSCRIPTION_REQUESTS.findIndex(function(r){return r.id===reqId});if(i>=0){INSCRIPTION_REQUESTS.splice(i,1);toast('Refus\u00e9e');tPage('students')}}
 
+function closeMod(){document.getElementById('mod-ov').classList.remove('open')}
+document.getElementById('mod-ov').addEventListener('click',function(e){if(e.target===this)closeMod()});
+function selPack(el,val){document.querySelectorAll('.pack-option').forEach(function(x){x.classList.remove('selected')});el.classList.add('selected')}
+
+async function saveCourse(){
+  var nom=document.getElementById('f-nom').value.trim();if(!nom){toast('Nom requis','err');return}
+  var selPacks=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
+  var profId=document.getElementById('f-prof').value||null;
+  var row={nom:nom,style:document.getElementById('f-style').value,prof_id:profId||null,jour:document.getElementById('f-jour').value,heure:document.getElementById('f-h').value,duree_min:parseInt(document.getElementById('f-d').value)||90,places_max:parseInt(document.getElementById('f-p').value)||12,niveau:document.getElementById('f-niv').value,packs_ids:selPacks,tarif_seance:(document.getElementById('f-tarif-seance')&&document.getElementById('f-tarif-seance').value?parseFloat(document.getElementById('f-tarif-seance').value):null)};
+  var local={id:EDIT_IDX>=0?COURSES[EDIT_IDX].id:uid(),nom:row.nom,style:row.style,profId:profId,jour:row.jour,heure:row.heure,duree:row.duree_min,places:row.places_max,inscrits:EDIT_IDX>=0?COURSES[EDIT_IDX].inscrits:0,niveau:row.niveau,packs:selPacks,tarif_seance:row.tarif_seance};
+  if(SUPABASE_READY){
+    if(EDIT_IDX>=0){var res=await sbUpdate('cours',COURSES[EDIT_IDX].id,row);if(res){COURSES[EDIT_IDX]=local;toast('Cours modifié ✓')}}
+    else{var res=await sbInsert('cours',row);if(res){local.id=res.id;COURSES.push(local);toast('Cours créé ✓')}}
+  }else{
+    if(EDIT_IDX>=0){COURSES[EDIT_IDX]=local;toast('Cours modifié ✓')}else{COURSES.push(local);toast('Cours créé ✓')}
+  }
+  closeMod();tPage('courses');
 }
+
+async function savePack(){
+  var nom=document.getElementById('pk-nom').value.trim();if(!nom){toast('Nom requis','err');return}
+  var type=document.getElementById('pk-type').value;
+  var row={nom:nom,type:type,nb_seances:type==='illimite'?null:parseInt(document.getElementById('pk-seances').value)||10,prix:parseFloat(document.getElementById('pk-prix').value)||0};
+  var local={id:EDIT_IDX>=0?PACKS[EDIT_IDX].id:uid(),nom:row.nom,type:row.type,seances:row.nb_seances,prix:row.prix};
+  if(SUPABASE_READY){
+    if(EDIT_IDX>=0){var res=await sbUpdate('packs',PACKS[EDIT_IDX].id,row);if(res){PACKS[EDIT_IDX]=local;toast('Pack modifié ✓')}}
+    else{var res=await sbInsert('packs',row);if(res){local.id=res.id;PACKS.push(local);toast('Pack créé ✓')}}
+  }else{
+    if(EDIT_IDX>=0){PACKS[EDIT_IDX]=local;toast('Pack modifié ✓')}else{PACKS.push(local);toast('Pack créé ✓')}
+  }
+  closeMod();tPage('courses');
+}
+
+async function savePost(){
+  var titre=document.getElementById('f-post-titre').value.trim();if(!titre){toast('Titre requis','err');return}
+  var mediaSrc=document.getElementById('post-media-src').value;
+  var isVid=MEDIA_TYPE==='video';
+  var desc=document.getElementById('f-post-desc').value.trim();
+  if(SUPABASE_READY&&CURRENT_USER){
+    var row={auteur_id:CURRENT_USER.id,titre:titre,description:desc,media_type:MEDIA_TYPE,media_url:isVid?null:(mediaSrc||null)};
+    var res=await sbInsert('posts',row);
+    if(res){POSTS.unshift({id:res.id,author:(CURRENT_PROFILE?CURRENT_PROFILE.prenom+' '+CURRENT_PROFILE.nom:'Prof'),authorInit:'RC',date:"À l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:isVid?null:(mediaSrc||null),bg:'#040810',em:'📸',likes:0,likedBy:[],comments:[],showComments:false});}
+  }else{
+    POSTS.unshift({id:uid(),author:'Prof',authorInit:'RC',date:"À l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:isVid?null:(mediaSrc||null),bg:'#040810',em:'📸',likes:0,likedBy:[],comments:[],showComments:false});
+  }
+  closeMod();tPage('feed');toast('Publication envoyée ✓');
+}
+
+async function saveProf(){
+  var pn=document.getElementById('pr-pn').value.trim(),nm=document.getElementById('pr-nm').value.trim();
+  if(!pn){toast('Prénom requis','err');return}
+  var styles=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
+  var photo=document.getElementById('prof-photo-data').value||null;
+  var row={prenom:pn,nom:nm,photo_url:photo,styles:styles,description:document.getElementById('pr-desc').value.trim()};
+  if(SUPABASE_READY){
+    if(EDIT_IDX>=0){var res=await sbUpdate('profs',PROFS[EDIT_IDX].id,row);if(res){PROFS[EDIT_IDX]={...PROFS[EDIT_IDX],...row,id:PROFS[EDIT_IDX].id};toast('Profil modifié ✓')}}
+    else{var res=await sbInsert('profs',row);if(res){PROFS.push({id:res.id,...row,photo:photo,desc:row.description});toast('Professeur ajouté ✓')}}
+  }else{
+    var pr={id:EDIT_IDX>=0?PROFS[EDIT_IDX].id:uid(),prenom:pn,nom:nm,photo:photo,styles:styles,desc:row.description};
+    if(EDIT_IDX>=0){PROFS[EDIT_IDX]=pr;toast('Profil modifié ✓')}else{PROFS.push(pr);toast('Professeur ajouté ✓')}
+  }
+  closeMod();tPage('profs');
+}
+
+
 async function confirmResa(id){
   if(SUPABASE_READY){
-    var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
     var r=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?id=eq.'+id,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
@@ -1409,8 +1337,10 @@ async function confirmResa(id){
     });
     if(!r.ok){var t=await r.text();toast('Erreur '+r.status+': '+t,'err');console.error('[RC] confirmResa:',r.status,t);return;}
   }
-  // Mettre à jour le compteur de réservations confirmées (impact sur dispo)
-RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
+  // Retirer de la liste d'attente (confirmée = disparaît de la liste prof)
+  RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
+  toast('Réservation confirmée ✓');
+  tPage('students');
 }
 
 function rejectResa(id){
@@ -1459,7 +1389,7 @@ async function confirmRejectResa(id){
     motif=txt&&txt.value.trim()?txt.value.trim():'Autre motif';
   }
   if(SUPABASE_READY){
-    var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
     var r=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?id=eq.'+id,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
@@ -1475,7 +1405,7 @@ async function confirmRejectResa(id){
 
 async function dismissRefusedResa(id){
   if(SUPABASE_READY){
-    var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
     await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?id=eq.'+id,{
       method:'DELETE',
       headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok}
@@ -2193,7 +2123,7 @@ async function loadSeances(){
   var futurStr=futur.toISOString().split('T')[0];
 
   // 1. Supprimer automatiquement les séances passées
-  var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+  var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
   await fetch(SUPABASE_URL+'/rest/v1/seances?date=lt.'+todayStr,{
     method:'DELETE',
     headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}
@@ -2244,7 +2174,7 @@ async function addSeanceManuelle(coursId){
 
 async function toggleSeance(id,currentStatut){
   var newStatut=currentStatut==='actif'?'annule':'actif';
-  var tok=localStorage.getItem('RC_TOKEN')||SUPABASE_KEY;
+  var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
   // Mettre à jour la séance
   await fetch(SUPABASE_URL+'/rest/v1/seances?id=eq.'+id,{
     method:'PATCH',
@@ -2510,10 +2440,8 @@ function sPage(p){
   var s=STUDENTS[LOGGED_STUDENT]||CURRENT_PROFILE||{};
   if(p==='feed')el.innerHTML=renderFeed(false);
   else if(p==='courses'){
-    // S'assurer que s est à jour avec les inscriptions
     if(CURRENT_PROFILE&&CURRENT_PROFILE.id){
       s=CURRENT_PROFILE;
-      // Synchroniser STUDENTS[0]
       if(!STUDENTS[0]||STUDENTS[0].id!==CURRENT_PROFILE.id) STUDENTS[0]=CURRENT_PROFILE;
     }
     el.innerHTML=renderSCourses(s);
@@ -2551,35 +2479,26 @@ function renderSProfs(){
   if(!PROFS.length)h+='<div class="empty">Aucun professeur enregistré.</div>';
   return h;
 }
-function switchCoursTab(btn){
-  S_COURS_TAB=btn.dataset.tab;
-  sPage('courses');
-}
+function switchCoursTab(btn){S_COURS_TAB=btn.dataset.tab;sPage('courses');}
 
 function renderSCourses(s){
   if(!s) return '<div class="empty">Chargement...</div>';
   var sid=s.id||(CURRENT_USER&&CURRENT_USER.id)||'';
   var pendingIds=INSCRIPTION_REQUESTS.filter(function(r){return r.studentId===sid}).map(function(r){return r.courseId});
-  var nivMap={'Débutant':'bg-green','Intermédiaire':'bg-gold','Avancé':'bg-blue','Tous niveaux':'bg-muted'};
   var activeSt='background:var(--accent);color:white;border:none;';
   var inactiveSt='background:transparent;color:var(--muted);border:none;';
-
-  // ── Toggle ──
   var h='<div style="display:flex;gap:4px;background:rgba(0,0,0,0.3);border-radius:8px;padding:4px;border:1px solid var(--border);margin-bottom:1rem">'+
     '<button data-tab="mes_cours" onclick="switchCoursTab(this)" style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='mes_cours'?activeSt:inactiveSt)+'">Mes cours</button>'+
     '<button data-tab="tous" onclick="switchCoursTab(this)" style="flex:1;padding:.55rem;border-radius:5px;font-family:Outfit,sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:.2s;'+(S_COURS_TAB==='tous'?activeSt:inactiveSt)+'">Tous les cours</button>'+
   '</div>';
-
   var myInscriptions=(s&&s.inscriptions)?s.inscriptions:[];
   if(S_COURS_TAB==='mes_cours'){
     if(!myInscriptions.length){
       h+='<div class="empty">Aucune inscription.<br>Consultez "Tous les cours".</div>';
     } else {
       myInscriptions.forEach(function(ins){
-        var co=getCourse(ins.courseId);
-        if(!co||!co.nom) return;
-        var prof=getProf(co.profId);
-        var next=getNextSession(co);
+        var co=getCourse(ins.courseId);if(!co||!co.nom) return;
+        var prof=getProf(co.profId);var next=getNextSession(co);
         var hFin='';
         if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
         var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
@@ -2607,28 +2526,22 @@ function renderSCourses(s){
           pendingIds.map(function(cid){var co=getCourse(cid);return co?'<div style="font-size:.82rem;color:var(--muted2)">· '+co.nom+' <span class="pending-badge">En attente</span></div>':''}).join('')+'</div>';
       }
     }
-
-    // ── Réservations séances uniques ──
     var resasEleve=sid?RESERVATIONS_SEANCE.filter(function(r){return r.eleve_id===sid&&r.statut!=='annule';}):[];
     if(resasEleve.length){
       var months2=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
       var weekDays2=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
       resasEleve.forEach(function(r){
-        var co=getCourse(r.cours_id);
-        if(!co) return;
+        var co=getCourse(r.cours_id);if(!co) return;
         var prof=getProf(co.profId);
         var d=new Date(r.date+'T12:00:00');
-        var dateStr=weekDays2[d.getDay()]+' '+d.getDate()+' '+months2[d.getMonth()];
         var hFin='';
         if(co.heure&&co.duree){var pts=co.heure.split(':');var tm=parseInt(pts[0])*60+parseInt(pts[1])+(co.duree||0);hFin=Math.floor(tm/60)+'h'+(tm%60<10?'0':'')+(tm%60);}
         var horaire=co.heure.replace(':','h')+(hFin?' - '+hFin:'');
-        var isConfirme=r.statut==='confirme';
-        var isRefuse=r.statut==='refuse';
-        var isAttente=r.statut==='attente';
+        var isConfirme=r.statut==='confirme';var isRefuse=r.statut==='refuse';
         var borderCol=isConfirme?'rgba(39,174,96,0.25)':'rgba(244,162,97,0.25)';
         var bgCol=isConfirme?'linear-gradient(135deg,rgba(39,174,96,0.12),rgba(39,174,96,0.04))':'linear-gradient(135deg,rgba(244,162,97,0.1),rgba(244,162,97,0.03))';
         var dateColor=isConfirme?'#27AE60':'var(--gold)';
-        var badgeLabel='Cours à l\'unité · '+dateStr+(isConfirme?' · ✓ Confirmé':' · ⏳ En attente');
+        var badgeLabel='Cours à l\'unité · '+weekDays2[d.getDay()]+' '+d.getDate()+' '+months2[d.getMonth()]+(isConfirme?' · ✓ Confirmé':' · ⏳ En attente');
         var badgeBg=isConfirme?'rgba(39,174,96,0.15)':'rgba(244,162,97,0.12)';
         var badgeBorder=isConfirme?'rgba(39,174,96,0.3)':'rgba(244,162,97,0.3)';
         var badgeColor=isConfirme?'#27AE60':'var(--gold)';
@@ -2652,13 +2565,10 @@ function renderSCourses(s){
       });
     }
   } else {
-    // ── Tous les cours ──
-    if(!COURSES.length){
-      h+='<div class="empty">Aucun cours disponible.</div>';
-    } else {
+    if(!COURSES.length){h+='<div class="empty">Aucun cours disponible.</div>';}
+    else {
       COURSES.forEach(function(co){
-        var prof=getProf(co.profId);
-        var next=getNextSession(co);
+        var prof=getProf(co.profId);var next=getNextSession(co);
         var dispo=co.places-(co.inscrits||0);
         var alreadyIn=myInscriptions.some(function(ins){return ins.courseId===co.id;});
         var hasPending=pendingIds.indexOf(co.id)>=0;
@@ -2692,7 +2602,6 @@ function renderSCourses(s){
   return h;
 }
 
-
 function renderSQR(s){
   return'<div class="qr-display-wrap"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:1.8rem;letter-spacing:.06em;color:var(--accent);margin-bottom:.3rem">Mon QR Code</div>'+
     '<div style="font-size:1rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.3rem">À présenter avant chaque cours</div>'+
@@ -2716,7 +2625,6 @@ function renderSProfile(s){
 }
 </script>
 
-
 <script>
 (function(){
   var m={name:"Resu.Crew",short_name:"Resu.Crew",description:"Resu.Crew - École de danse",start_url:"./",display:"standalone",background_color:"#07090F",theme_color:"#07090F",orientation:"portrait-primary",
@@ -2727,21 +2635,17 @@ function renderSProfile(s){
   };
   var el=document.getElementById('rc-manifest');
   if(el)el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/json'}));
-
-  // Service worker: requires HTTPS hosting (Netlify) - not available in standalone file mode
-
   var deferredPrompt=null;
   window.addEventListener('beforeinstallprompt',function(e){
-    e.preventDefault();
-    deferredPrompt=e;
+    e.preventDefault();deferredPrompt=e;
     setTimeout(function(){
       if(deferredPrompt&&!localStorage.getItem('rc-installed')){
         var b=document.createElement('div');
         b.id='install-banner';
         b.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(10,14,26,0.97);border:1px solid rgba(42,127,232,0.4);border-radius:12px;padding:.85rem 1.2rem;display:flex;align-items:center;gap:.9rem;z-index:8000;backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,0.5);max-width:320px;width:90%';
         b.innerHTML='<div style="font-size:1.6rem">&#128241;</div>'+
-          '<div style="flex:1"><div style="font-size:1rem;font-weight:600;color:#EEF2FF">Installer l&#39;app</div>'+
-          '<div style="font-size:1rem;color:#6B7699;margin-top:.15rem">Acc&#232;s rapide depuis l&#39;&#233;cran d&#39;accueil</div></div>'+
+          '<div style="flex:1"><div style="font-size:1rem;font-weight:600;color:#EEF2FF">Installer l\'app</div>'+
+          '<div style="font-size:1rem;color:#6B7699;margin-top:.15rem">Accès rapide depuis l\'écran d\'accueil</div></div>'+
           '<button onclick="rcInstall()" style="padding:.45rem .85rem;border-radius:6px;border:none;background:#2A7FE8;color:white;font-family:Outfit,sans-serif;font-size:1.05rem;font-weight:600;cursor:pointer">Installer</button>'+
           '<button onclick="document.getElementById(&quot;install-banner&quot;).remove()" style="background:none;border:none;color:#6B7699;cursor:pointer;font-size:1.2rem;padding:0;line-height:1">&times;</button>';
         document.body.appendChild(b);

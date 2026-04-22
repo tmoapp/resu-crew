@@ -2089,7 +2089,7 @@ function renderTStudents(){
     h+='<div class="card"><div style="font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Demandes d\'inscription</div>';
     INSCRIPTION_REQUESTS.forEach(function(req){
       var s=getStudent(req.studentId);var co=getCourse(req.courseId);var pk=getPack(req.packId);if(!s)return;
-      h+='<div class="req-row"><div class="req-info"><div class="req-name">'+s.prenom+' '+s.nom+'</div><div class="req-detail">'+co.nom+' · '+pk.nom+' ('+pk.prix+' €)<br>'+req.date+(req.msg?' — "'+req.msg+'"':'')+'</div></div><div class="req-actions"><button class="btn-approve" data-rid="'+req.id+'" onclick="approveIns(this.dataset.rid)">eject" onclick="rejectIns(\''+req.id+'\')">✕</button></div></div>';
+      h+='<div class="req-row"><div class="req-info"><div class="req-name">'+s.prenom+' '+s.nom+'</div><div class="req-detail">'+co.nom+' · '+pk.nom+' ('+pk.prix+' €)<br>'+req.date+(req.msg?' — "'+req.msg+'"':'')+'</div></div><div class="req-actions"><button class="btn-approve" data-rid="'+req.id+'" onclick="approveIns(this.dataset.rid)">✓</button><button class="btn-reject" data-rid="'+req.id+'" onclick="rejectIns(this.dataset.rid)">✕</button></div></div>';
     });
     h+='</div>';
   }

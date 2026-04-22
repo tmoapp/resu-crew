@@ -1032,11 +1032,7 @@ async function confirmResa(id){
     if(!r.ok){var t=await r.text();toast('Erreur '+r.status+': '+t,'err');console.error('[RC] confirmResa:',r.status,t);return;}
   }
   // Mettre à jour le compteur de réservations confirmées (impact sur dispo)
-  var resa=RESERVATIONS_SEANCE.find(function(r){return r.id===id;});
-  if(resa) resa.statut='confirme';
-  else RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
-  toast('Réservation confirmée ✓');
-  tPage('students');
+RESERVATIONS_SEANCE=RESERVATIONS_SEANCE.filter(function(r){return r.id!==id;});
 }
 
 function rejectResa(id){

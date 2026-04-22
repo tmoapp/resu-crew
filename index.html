@@ -1374,11 +1374,11 @@ async function generateSeances(){
   if(!SUPABASE_READY||!COURSES.length) return;
   var today=new Date(); today.setHours(0,0,0,0);
   var days={'Lundi':1,'Mardi':2,'Mercredi':3,'Jeudi':4,'Vendredi':5,'Samedi':6,'Dimanche':0};
+  var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
   for(var ci=0;ci<COURSES.length;ci++){
     var co=COURSES[ci];
     var targetDay=days[co.jour];
     if(targetDay===undefined) continue;
-    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
     for(var w=0;w<8;w++){
       var d=new Date(today);
       var diff=targetDay-d.getDay();
@@ -1396,7 +1396,6 @@ async function generateSeances(){
     }
   }
 }
-
 function rejectIns(reqId){var i=INSCRIPTION_REQUESTS.findIndex(function(r){return r.id===reqId});if(i>=0){INSCRIPTION_REQUESTS.splice(i,1);toast('Refus\u00e9e');tPage('students')}}
 
 }

@@ -417,7 +417,7 @@ async function rcSignUp(email, password, meta) {
   });
   var d = await r.json();
   if (d.error || (!d.id && !d.user)) return { error: d.error_description || d.msg || d.error || 'Erreur inscription' };
-  return { user: d.user || d };
+  return { user: d.user || d, access_token: d.access_token || null };
 }
 
 // ── Init client Supabase (DB uniquement, pas d'auth) ──
@@ -787,14 +787,15 @@ async function submitRegister(){
     var res=await rcSignUp(email,pw,{prenom:pn,nom:nm,tel:tel,niveau:niveau});
     if(res.error){toast('Erreur: '+res.error,'err');return;}
     var newUser=res.user;
+    var newToken=res.access_token||SUPABASE_KEY;
     if(newUser&&newUser.id){
-      // 2. Forcer role=eleve, statut=attente dans profiles via fetch direct (contourne RLS)
+      // 2. Forcer role=eleve, statut=attente dans profiles avec le token du nouvel utilisateur
       await fetch(SUPABASE_URL+'/rest/v1/profiles',{
         method:'POST',
         headers:{
           'Content-Type':'application/json',
           'apikey':SUPABASE_KEY,
-          'Authorization':'Bearer '+SUPABASE_KEY,
+          'Authorization':'Bearer '+newToken,
           'Prefer':'resolution=merge-duplicates,return=minimal'
         },
         body:JSON.stringify({

@@ -417,7 +417,7 @@ async function rcSignUp(email, password, meta) {
   });
   var d = await r.json();
   if (d.error || (!d.id && !d.user)) return { error: d.error_description || d.msg || d.error || 'Erreur inscription' };
-  return { user: d.user || d, access_token: d.access_token || null };
+  return { user: d.user || d };
 }
 
 // ── Init client Supabase (DB uniquement, pas d'auth) ──
@@ -784,46 +784,15 @@ async function submitRegister(){
 
   if(SUPABASE_READY){
     // 1. Créer le compte Auth
-    var photo=document.getElementById('reg-photo-data').value||null;
     var res=await rcSignUp(email,pw,{prenom:pn,nom:nm,tel:tel,niveau:niveau});
     if(res.error){toast('Erreur: '+res.error,'err');return;}
     var newUser=res.user;
-    var newToken=res.access_token||SUPABASE_KEY;
     if(newUser&&newUser.id){
-      // 2a. Upload photo si présente
-      var photoUrl=null;
-      if(photo&&photo.startsWith('data:image')&&newToken!==SUPABASE_KEY){
-        try{
-          var fetchRes=await fetch(photo);
-          var blob=await fetchRes.blob();
-          var ext=(blob.type.split('/')[1])||'jpg';
-          var path='avatars/'+newUser.id+'.'+ext;
-          var upRes=await fetch(SUPABASE_URL+'/storage/v1/object/avatars/'+newUser.id+'.'+ext,{
-            method:'POST',
-            headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+newToken,'Content-Type':blob.type},
-            body:blob
-          });
-          if(upRes.ok){
-            photoUrl=SUPABASE_URL+'/storage/v1/object/public/avatars/'+newUser.id+'.'+ext;
-          }
-        }catch(e){console.warn('Photo upload:',e);}
-      }
-      // 2b. Forcer role=eleve, statut=attente dans profiles avec le token du nouvel utilisateur
-      await fetch(SUPABASE_URL+'/rest/v1/profiles',{
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'apikey':SUPABASE_KEY,
-          'Authorization':'Bearer '+newToken,
-          'Prefer':'resolution=merge-duplicates,return=minimal'
-        },
-        body:JSON.stringify({
-          id:newUser.id,role:'eleve',
-          prenom:pn,nom:nm,email:email,
-          tel:tel||null,dob:dob||null,
-          niveau:niveau,statut:'attente',
-          photo_url:photoUrl
-        })
+      // 2. Forcer role=eleve, statut=attente dans profiles
+      await sb.from('profiles').upsert({
+        id:newUser.id,role:'eleve',
+        prenom:pn,nom:nm,email:email,
+        tel:tel,dob:dob||null,niveau:niveau,statut:'attente'
       });
       // 3. Insérer dans demandes_compte via fetch direct (contourne RLS)
       await fetch(SUPABASE_URL+'/rest/v1/demandes_compte',{
@@ -1109,37 +1078,13 @@ async function approvePending(i){
   tPage('students');
 }
 
-function openPendingDetail(i){
-  var p=PENDING_ACCOUNTS[i];
-  var T=document.getElementById('mod-title');
-  var B=document.getElementById('mod-body');
-  document.getElementById('mod-ov').classList.add('open');
-  T.textContent='Demande de compte';
-  var photoHtml=p.photo?'<div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid var(--accent);margin:0 auto .9rem"><img src="'+p.photo+'" style="width:100%;height:100%;object-fit:cover"/></div>':'<div style="width:72px;height:72px;border-radius:50%;background:rgba(42,127,232,0.1);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-family:Bebas Neue,sans-serif;font-size:1.4rem;color:var(--accent);margin:0 auto .9rem">'+(p.prenom[0]||'').toUpperCase()+(p.nom[0]||'').toUpperCase()+'</div>';
-  var dob=p.dob?new Date(p.dob).toLocaleDateString('fr'):'—';
-  B.innerHTML=photoHtml+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem">'+
-    '<div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border)"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Prénom</div><div style="font-size:.95rem;font-weight:600;margin-top:.2rem">'+p.prenom+'</div></div>'+
-    '<div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border)"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Nom</div><div style="font-size:.95rem;font-weight:600;margin-top:.2rem">'+p.nom+'</div></div>'+
-    '<div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border);grid-column:span 2"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Email</div><div style="font-size:.95rem;font-weight:600;margin-top:.2rem">'+p.email+'</div></div>'+
-    '<div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border)"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Téléphone</div><div style="font-size:.95rem;font-weight:600;margin-top:.2rem">'+(p.tel||'—')+'</div></div>'+
-    '<div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border)"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Naissance</div><div style="font-size:.95rem;font-weight:600;margin-top:.2rem">'+dob+'</div></div>'+
-    '<div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border);grid-column:span 2"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Niveau</div><div style="font-size:.95rem;font-weight:600;margin-top:.2rem">'+p.niveau+'</div></div>'+
-    '</div>'+
-    '<div class="modal-actions">'+
-    '<button class="btn-primary" style="flex:1;background:rgba(39,174,96,0.8)" onclick="closeMod();approvePending('+i+')">✓ Valider</button>'+
-    '<button class="btn-primary" style="flex:1;background:rgba(220,50,50,0.8)" onclick="closeMod();rejectPending('+i+')">✕ Refuser</button>'+
-    '</div>';
-}
+function openPendingDetail(i){var p=PENDING_ACCOUNTS[i];document.getElementById('mod-title').textContent='Demande de compte';var B=document.getElementById('mod-body');document.getElementById('mod-ov').classList.add('open');var photoHtml=p.photo?'<div style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:2px solid var(--accent);margin:0 auto .9rem"><img src="'+p.photo+'" style="width:100%;height:100%;object-fit:cover"/></div>':'<div style="width:72px;height:72px;border-radius:50%;background:rgba(42,127,232,0.1);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-family:Bebas Neue,sans-serif;font-size:1.4rem;color:var(--accent);margin:0 auto .9rem">'+(p.prenom[0]||'').toUpperCase()+(p.nom[0]||'').toUpperCase()+'</div>';var dob=p.dob?new Date(p.dob).toLocaleDateString('fr'):'\u2014';B.innerHTML=photoHtml+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem"><div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border)"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase">Pr\u00e9nom</div><div style="font-weight:600;margin-top:.2rem">'+p.prenom+'</div></div><div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border)"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase">Nom</div><div style="font-weight:600;margin-top:.2rem">'+p.nom+'</div></div><div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border);grid-column:span 2"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase">Email</div><div style="font-weight:600;margin-top:.2rem">'+p.email+'</div></div><div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border)"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase">T\u00e9l\u00e9phone</div><div style="font-weight:600;margin-top:.2rem">'+(p.tel||'\u2014')+'</div></div><div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border)"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase">Naissance</div><div style="font-weight:600;margin-top:.2rem">'+dob+'</div></div><div style="background:var(--bg2);border-radius:8px;padding:.7rem;border:1px solid var(--border);grid-column:span 2"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase">Niveau</div><div style="font-weight:600;margin-top:.2rem">'+p.niveau+'</div></div></div><div class="modal-actions"><button class="btn-primary" style="flex:1;background:rgba(39,174,96,0.8)" onclick="closeMod();approvePending('+i+')">\u2713 Valider</button><button class="btn-primary" style="flex:1;background:rgba(220,50,50,0.8)" onclick="closeMod();rejectPending('+i+')">\u2715 Refuser</button></div>';}
 async function rejectPending(i){
   if(!confirm('Refuser et supprimer le compte de '+PENDING_ACCOUNTS[i].prenom+' '+PENDING_ACCOUNTS[i].nom+' ?'))return;
   var p=PENDING_ACCOUNTS[i];
   if(SUPABASE_READY){
     if(p.dbId){
-      await fetch(SUPABASE_URL+'/rest/v1/profiles?id=eq.'+p.dbId,{
-        method:'DELETE',
-        headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}
-      }).catch(function(){});
+      await fetch(SUPABASE_URL+'/rest/v1/profiles?id=eq.'+p.dbId,{method:'DELETE',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}}).catch(function(){});
       await fetch(SUPABASE_URL+'/rest/v1/rpc/delete_user',{
         method:'POST',
         headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)},
@@ -1321,50 +1266,8 @@ async function generateSeances(){
 function closeMod(){document.getElementById('mod-ov').classList.remove('open')}
 document.getElementById('mod-ov').addEventListener('click',function(e){if(e.target===this)closeMod()});
 function selPack(el,val){document.querySelectorAll('.pack-option').forEach(function(x){x.classList.remove('selected')});el.classList.add('selected')}
-
-function setMediaType(t){
-  MEDIA_TYPE=t;
-  var imgBtn=document.getElementById('mt-img');
-  var vidBtn=document.getElementById('mt-vid');
-  if(imgBtn) imgBtn.className='mt-btn'+(t==='image'?' on':'');
-  if(vidBtn) vidBtn.className='mt-btn'+(t==='video'?' on':'');
-  var srcEl=document.getElementById('post-media-src');
-  if(srcEl) srcEl.value='';
-  var z=document.getElementById('media-zone');
-  if(!z) return;
-  if(t==='image'){
-    z.innerHTML='<div style="font-size:1.6rem;margin-bottom:.4rem">🖼</div><div style="font-size:1.05rem;color:var(--muted)">Appuyez pour choisir une image</div><div style="font-size:1.05rem;color:var(--muted);margin-top:.2rem">JPG, PNG, GIF</div>';
-  }else{
-    z.innerHTML='<div style="font-size:1.6rem;margin-bottom:.4rem">🎬</div><div style="font-size:1.05rem;color:var(--muted)">Appuyez pour choisir une vidéo</div><div style="font-size:1.05rem;color:var(--muted);margin-top:.2rem">MP4, MOV, AVI</div>';
-  }
-}
-
-function handleFileUpload(input){
-  var file=input.files[0];
-  if(!file) return;
-  var isVideo=file.type.startsWith('video/');
-  // Vérifier taille max 50MB
-  if(file.size>50*1024*1024){toast('Fichier trop lourd (max 50 MB)','err');return;}
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var dataUrl=e.target.result;
-    var srcEl=document.getElementById('post-media-src');
-    if(srcEl) srcEl.value=dataUrl;
-    var zone=document.getElementById('media-zone');
-    if(zone){
-      if(isVideo){
-        zone.innerHTML='<video src="'+dataUrl+'" style="width:100%;max-height:160px;border-radius:6px;object-fit:cover" controls muted playsinline></video>'+
-          '<div style="font-size:.85rem;color:var(--accent2);margin-top:.4rem">'+file.name+'</div>';
-      }else{
-        zone.innerHTML='<img src="'+dataUrl+'" style="width:100%;max-height:160px;border-radius:6px;object-fit:cover"/>'+
-          '<div style="font-size:.85rem;color:var(--accent2);margin-top:.4rem">'+file.name+'</div>';
-      }
-    }
-    toast((isVideo?'Vidéo':'Image')+' ajoutée ✓');
-  };
-  reader.onerror=function(){toast('Erreur lecture fichier','err');};
-  reader.readAsDataURL(file);
-}
+function setMediaType(t){MEDIA_TYPE=t;var imgBtn=document.getElementById('mt-img');var vidBtn=document.getElementById('mt-vid');if(imgBtn)imgBtn.className='mt-btn'+(t==='image'?' on':'');if(vidBtn)vidBtn.className='mt-btn'+(t==='video'?' on':'');var srcEl=document.getElementById('post-media-src');if(srcEl)srcEl.value='';var z=document.getElementById('media-zone');if(!z)return;if(t==='image'){z.innerHTML='<div style="font-size:1.6rem;margin-bottom:.4rem">\ud83d\uddbc</div><div style="color:var(--muted)">Choisir une image</div><div style="font-size:.8rem;color:var(--muted)">JPG, PNG, GIF</div>';}else{z.innerHTML='<div style="font-size:1.6rem;margin-bottom:.4rem">\ud83c\udfa5</div><div style="color:var(--muted)">Choisir une vid\u00e9o</div><div style="font-size:.8rem;color:var(--muted)">MP4, MOV, AVI</div>';}}
+function handleFileUpload(input){var file=input.files[0];if(!file)return;var isVideo=file.type.startsWith('video/');if(file.size>50*1024*1024){toast('Fichier trop lourd (max 50 MB)','err');return;}var reader=new FileReader();reader.onload=function(e){var dataUrl=e.target.result;var srcEl=document.getElementById('post-media-src');if(srcEl)srcEl.value=dataUrl;var zone=document.getElementById('media-zone');if(zone){if(isVideo){zone.innerHTML='<video src="'+dataUrl+'" style="width:100%;max-height:160px;border-radius:6px;object-fit:cover" controls muted playsinline></video><div style="font-size:.85rem;color:var(--accent2);margin-top:.4rem">'+file.name+'</div>';}else{zone.innerHTML='<img src="'+dataUrl+'" style="width:100%;max-height:160px;border-radius:6px;object-fit:cover"/><div style="font-size:.85rem;color:var(--accent2);margin-top:.4rem">'+file.name+'</div>';}}toast((isVideo?'Vid\u00e9o':'Image')+' ajout\u00e9e \u2713');};reader.onerror=function(){toast('Erreur lecture fichier','err');};reader.readAsDataURL(file);}
 
 async function saveCourse(){
   var nom=document.getElementById('f-nom').value.trim();if(!nom){toast('Nom requis','err');return}
@@ -1396,69 +1299,71 @@ async function savePack(){
 }
 
 async function savePost(){
-  var titre=document.getElementById('f-post-titre').value.trim();if(!titre){toast('Titre requis','err');return}
+  var titre=document.getElementById('f-post-titre').value.trim();if(!titre){toast('Titre requis','err');return;}
   var mediaSrc=document.getElementById('post-media-src').value;
   var isVid=MEDIA_TYPE==='video';
   var desc=document.getElementById('f-post-desc').value.trim();
+  var mediaUrl=null;
+  if(mediaSrc&&mediaSrc.startsWith('data:')&&SUPABASE_READY&&CURRENT_USER){
+    toast('Upload en cours...','info');
+    try{
+      var fetchRes=await fetch(mediaSrc);var blob=await fetchRes.blob();
+      var ext=blob.type.split('/')[1]||'jpg';if(ext==='quicktime')ext='mov';
+      var filename='posts/'+Date.now()+'-'+CURRENT_USER.id+'.'+ext;
+      var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
+      var upRes=await fetch(SUPABASE_URL+'/storage/v1/object/media/'+filename,{
+        method:'POST',
+        headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Content-Type':blob.type},
+        body:blob
+      });
+      if(upRes.ok){mediaUrl=SUPABASE_URL+'/storage/v1/object/public/media/'+filename;}
+      else{console.error('[RC] upload:',upRes.status,await upRes.text());toast('Erreur upload m\u00e9dia','err');return;}
+    }catch(e){console.error('[RC] upload:',e);toast('Erreur upload','err');return;}
+  }else if(mediaSrc&&!mediaSrc.startsWith('data:')){mediaUrl=mediaSrc;}
+  var authorInit=CURRENT_PROFILE?((CURRENT_PROFILE.prenom[0]||'').toUpperCase()+(CURRENT_PROFILE.nom[0]||'').toUpperCase()):'RC';
+  var authorName=CURRENT_PROFILE?CURRENT_PROFILE.prenom+' '+CURRENT_PROFILE.nom:'Prof';
   if(SUPABASE_READY&&CURRENT_USER){
-    var row={auteur_id:CURRENT_USER.id,titre:titre,description:desc,media_type:MEDIA_TYPE,media_url:isVid?null:(mediaSrc||null)};
+    var row={auteur_id:CURRENT_USER.id,titre:titre,description:desc,media_type:MEDIA_TYPE,media_url:mediaUrl||null};
     var res=await sbInsert('posts',row);
-    if(res){POSTS.unshift({id:res.id,author:(CURRENT_PROFILE?CURRENT_PROFILE.prenom+' '+CURRENT_PROFILE.nom:'Prof'),authorInit:'RC',date:"À l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:isVid?null:(mediaSrc||null),bg:'#040810',em:'📸',likes:0,likedBy:[],comments:[],showComments:false});}
+    if(res){POSTS.unshift({id:res.id,author:authorName,authorInit:authorInit,date:"\u00c0 l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:mediaUrl||null,bg:'#040810',em:isVid?'\U0001f3a5':'\U0001f4f8',likes:0,likedBy:[],comments:[],showComments:false});}
   }else{
-    POSTS.unshift({id:uid(),author:'Prof',authorInit:'RC',date:"À l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:isVid?null:(mediaSrc||null),bg:'#040810',em:'📸',likes:0,likedBy:[],comments:[],showComments:false});
+    POSTS.unshift({id:uid(),author:authorName,authorInit:authorInit,date:"\u00c0 l'instant",titre:titre,desc:desc,mediaType:MEDIA_TYPE,mediaSrc:mediaUrl||mediaSrc||null,bg:'#040810',em:isVid?'\U0001f3a5':'\U0001f4f8',likes:0,likedBy:[],comments:[],showComments:false});
   }
-  closeMod();tPage('feed');toast('Publication envoyée ✓');
+  closeMod();tPage('feed');toast('Publication envoy\u00e9e \u2713');
 }
 
 async function saveProf(){
-  var btn=document.querySelector('#mod-body .btn-primary');
-  if(btn&&btn.disabled) return;
-  if(btn) btn.disabled=true;
+  var btn=document.querySelector('#mod-body .btn-primary');if(btn&&btn.disabled)return;if(btn)btn.disabled=true;
   var pn=document.getElementById('pr-pn').value.trim(),nm=document.getElementById('pr-nm').value.trim();
-  if(!pn){toast('Prénom requis','err');if(btn)btn.disabled=false;return;}
+  if(!pn){toast('Prénom requis','err');return}
   var styles=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
   var photo=document.getElementById('prof-photo-data').value||null;
   var row={prenom:pn,nom:nm,photo_url:photo,styles:styles,description:document.getElementById('pr-desc').value.trim()};
   if(SUPABASE_READY){
-    if(EDIT_IDX>=0){
-      var res=await sbUpdate('profs',PROFS[EDIT_IDX].id,row);
-      if(res){PROFS[EDIT_IDX]={...PROFS[EDIT_IDX],...row,id:PROFS[EDIT_IDX].id,photo:photo,desc:row.description};toast('Profil modifié ✓');}
-    }else{
-      var res=await sbInsert('profs',row);
-      if(res){PROFS.push({id:res.id,prenom:pn,nom:nm,photo:photo,styles:styles,desc:row.description});toast('Professeur ajouté ✓');}
-    }
+    if(EDIT_IDX>=0){var res=await sbUpdate('profs',PROFS[EDIT_IDX].id,row);if(res){PROFS[EDIT_IDX]={...PROFS[EDIT_IDX],...row,id:PROFS[EDIT_IDX].id};toast('Profil modifié ✓')}}
+    else{var res=await sbInsert('profs',row);if(res){PROFS.push({id:res.id,...row,photo:photo,desc:row.description});toast('Professeur ajouté ✓')}}
   }else{
     var pr={id:EDIT_IDX>=0?PROFS[EDIT_IDX].id:uid(),prenom:pn,nom:nm,photo:photo,styles:styles,desc:row.description};
-    if(EDIT_IDX>=0){PROFS[EDIT_IDX]=pr;toast('Profil modifié ✓');}else{PROFS.push(pr);toast('Professeur ajouté ✓');}
+    if(EDIT_IDX>=0){PROFS[EDIT_IDX]=pr;toast('Profil modifié ✓')}else{PROFS.push(pr);toast('Professeur ajouté ✓')}
   }
   closeMod();tPage('profs');
 }
 
 
 async function deleteProf(i){
-  if(!confirm('Supprimer le professeur '+PROFS[i].prenom+' '+PROFS[i].nom+' ? Cette action est irréversible.'))return;
+  if(!confirm('Supprimer le professeur '+PROFS[i].prenom+' '+PROFS[i].nom+' ?'))return;
   var profId=PROFS[i].id;
   if(SUPABASE_READY){
     var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
-    var r=await fetch(SUPABASE_URL+'/rest/v1/profs?id=eq.'+profId,{
-      method:'DELETE',
-      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}
-    });
-    if(!r.ok){var t=await r.text();toast('Erreur suppression: '+r.status,'err');console.error(t);return;}
-    // Dissocier le prof des cours (mettre prof_id à null)
-    await fetch(SUPABASE_URL+'/rest/v1/cours?prof_id=eq.'+profId,{
-      method:'PATCH',
-      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
-      body:JSON.stringify({prof_id:null})
-    }).catch(function(){});
+    var r=await fetch(SUPABASE_URL+'/rest/v1/profs?id=eq.'+profId,{method:'DELETE',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}});
+    if(!r.ok){toast('Erreur suppression: '+r.status,'err');return;}
+    await fetch(SUPABASE_URL+'/rest/v1/cours?prof_id=eq.'+profId,{method:'PATCH',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},body:JSON.stringify({prof_id:null})}).catch(function(){});
   }
-  // Dissocier localement
   COURSES.forEach(function(co){if(co.profId===profId)co.profId=null;});
   PROFS.splice(i,1);
-  toast('Professeur supprimé ✓');
+  toast('Professeur supprim\u00e9 \u2713');
   tPage('profs');
 }
-
 async function confirmResa(id){
   if(SUPABASE_READY){
     var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
@@ -1924,6 +1829,16 @@ function closePostDetail(){
   document.body.style.overflow='';
 }
 
+async function deletePost(postIdx){
+  if(!confirm('Supprimer cette publication ?'))return;
+  var post=POSTS[postIdx];if(!post)return;
+  if(SUPABASE_READY&&post.id){
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
+    var r=await fetch(SUPABASE_URL+'/rest/v1/posts?id=eq.'+post.id,{method:'DELETE',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}});
+    if(!r.ok){toast('Erreur: '+r.status,'err');return;}
+  }
+  POSTS.splice(postIdx,1);toast('Publication supprim\u00e9e \u2713');tPage('feed');
+}
 function toggleLike(postId){var post=POSTS.find(function(p){return p.id===postId});if(!post)return;var uid2=ROLE==='prof'?'prof_sm':STUDENTS[LOGGED_STUDENT].id;var idx=post.likedBy.indexOf(uid2);if(idx>=0){post.likedBy.splice(idx,1);post.likes--}else{post.likedBy.push(uid2);post.likes++}ROLE==='prof'?tPage('feed'):sPage('feed')}
 function toggleComments(postId){var post=POSTS.find(function(p){return p.id===postId});if(post)post.showComments=!post.showComments;ROLE==='prof'?tPage('feed'):sPage('feed')}
 async function sendComment(postId){
@@ -2520,7 +2435,7 @@ function renderTStudents(){
   var h='<div class="sec-h"><h2>En attente ('+total+')</h2><button class="btn-add" onclick="openMod(\'newstudent\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Créer</button></div>';
   if(PENDING_ACCOUNTS.length){
     h+='<div class="card"><div style="font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Comptes à valider</div>';
-    PENDING_ACCOUNTS.forEach(function(p,i){h+='<div class="pend-row" style="cursor:pointer" onclick="openPendingDetail('+i+')"><div><div style="font-size:1rem;font-weight:500">'+p.prenom+' '+p.nom+'</div><div style="font-size:1.1rem;color:var(--muted2)">'+p.email+' · '+p.niveau+'</div></div><div class="pend-actions"><button class="btn-approve" onclick="event.stopPropagation();approvePending('+i+')">✓</button><button class="btn-reject" onclick="event.stopPropagation();rejectPending('+i+')">✕</button></div></div>';});
+    PENDING_ACCOUNTS.forEach(function(p,i){h+='<div class="pend-row"><div><div style="font-size:1rem;font-weight:500">'+p.prenom+' '+p.nom+'</div><div style="font-size:1.1rem;color:var(--muted2)">'+p.email+' · '+p.niveau+'</div></div><div class="pend-actions"><button class="btn-approve" onclick="approvePending('+i+')">✓</button><button class="btn-reject" onclick="rejectPending('+i+')">✕</button></div></div>'});
     h+='</div>';
   }
   if(INSCRIPTION_REQUESTS.length){

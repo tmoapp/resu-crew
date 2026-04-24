@@ -1367,21 +1367,53 @@ async function savePost(){
 }
 
 async function saveProf(){
+  var btn=document.querySelector('#mod-body .btn-primary');
+  if(btn&&btn.disabled) return;
+  if(btn) btn.disabled=true;
   var pn=document.getElementById('pr-pn').value.trim(),nm=document.getElementById('pr-nm').value.trim();
-  if(!pn){toast('Prénom requis','err');return}
+  if(!pn){toast('Prénom requis','err');if(btn)btn.disabled=false;return;}
   var styles=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});
   var photo=document.getElementById('prof-photo-data').value||null;
   var row={prenom:pn,nom:nm,photo_url:photo,styles:styles,description:document.getElementById('pr-desc').value.trim()};
   if(SUPABASE_READY){
-    if(EDIT_IDX>=0){var res=await sbUpdate('profs',PROFS[EDIT_IDX].id,row);if(res){PROFS[EDIT_IDX]={...PROFS[EDIT_IDX],...row,id:PROFS[EDIT_IDX].id};toast('Profil modifié ✓')}}
-    else{var res=await sbInsert('profs',row);if(res){PROFS.push({id:res.id,...row,photo:photo,desc:row.description});toast('Professeur ajouté ✓')}}
+    if(EDIT_IDX>=0){
+      var res=await sbUpdate('profs',PROFS[EDIT_IDX].id,row);
+      if(res){PROFS[EDIT_IDX]={...PROFS[EDIT_IDX],...row,id:PROFS[EDIT_IDX].id,photo:photo,desc:row.description};toast('Profil modifié ✓');}
+    }else{
+      var res=await sbInsert('profs',row);
+      if(res){PROFS.push({id:res.id,prenom:pn,nom:nm,photo:photo,styles:styles,desc:row.description});toast('Professeur ajouté ✓');}
+    }
   }else{
     var pr={id:EDIT_IDX>=0?PROFS[EDIT_IDX].id:uid(),prenom:pn,nom:nm,photo:photo,styles:styles,desc:row.description};
-    if(EDIT_IDX>=0){PROFS[EDIT_IDX]=pr;toast('Profil modifié ✓')}else{PROFS.push(pr);toast('Professeur ajouté ✓')}
+    if(EDIT_IDX>=0){PROFS[EDIT_IDX]=pr;toast('Profil modifié ✓');}else{PROFS.push(pr);toast('Professeur ajouté ✓');}
   }
   closeMod();tPage('profs');
 }
 
+
+async function deleteProf(i){
+  if(!confirm('Supprimer le professeur '+PROFS[i].prenom+' '+PROFS[i].nom+' ? Cette action est irréversible.'))return;
+  var profId=PROFS[i].id;
+  if(SUPABASE_READY){
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
+    var r=await fetch(SUPABASE_URL+'/rest/v1/profs?id=eq.'+profId,{
+      method:'DELETE',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}
+    });
+    if(!r.ok){var t=await r.text();toast('Erreur suppression: '+r.status,'err');console.error(t);return;}
+    // Dissocier le prof des cours (mettre prof_id à null)
+    await fetch(SUPABASE_URL+'/rest/v1/cours?prof_id=eq.'+profId,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'},
+      body:JSON.stringify({prof_id:null})
+    }).catch(function(){});
+  }
+  // Dissocier localement
+  COURSES.forEach(function(co){if(co.profId===profId)co.profId=null;});
+  PROFS.splice(i,1);
+  toast('Professeur supprimé ✓');
+  tPage('profs');
+}
 
 async function confirmResa(id){
   if(SUPABASE_READY){

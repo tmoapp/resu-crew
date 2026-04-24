@@ -1322,6 +1322,50 @@ function closeMod(){document.getElementById('mod-ov').classList.remove('open')}
 document.getElementById('mod-ov').addEventListener('click',function(e){if(e.target===this)closeMod()});
 function selPack(el,val){document.querySelectorAll('.pack-option').forEach(function(x){x.classList.remove('selected')});el.classList.add('selected')}
 
+function setMediaType(t){
+  MEDIA_TYPE=t;
+  var imgBtn=document.getElementById('mt-img');
+  var vidBtn=document.getElementById('mt-vid');
+  if(imgBtn) imgBtn.className='mt-btn'+(t==='image'?' on':'');
+  if(vidBtn) vidBtn.className='mt-btn'+(t==='video'?' on':'');
+  var srcEl=document.getElementById('post-media-src');
+  if(srcEl) srcEl.value='';
+  var z=document.getElementById('media-zone');
+  if(!z) return;
+  if(t==='image'){
+    z.innerHTML='<div style="font-size:1.6rem;margin-bottom:.4rem">🖼</div><div style="font-size:1.05rem;color:var(--muted)">Appuyez pour choisir une image</div><div style="font-size:1.05rem;color:var(--muted);margin-top:.2rem">JPG, PNG, GIF</div>';
+  }else{
+    z.innerHTML='<div style="font-size:1.6rem;margin-bottom:.4rem">🎬</div><div style="font-size:1.05rem;color:var(--muted)">Appuyez pour choisir une vidéo</div><div style="font-size:1.05rem;color:var(--muted);margin-top:.2rem">MP4, MOV, AVI</div>';
+  }
+}
+
+function handleFileUpload(input){
+  var file=input.files[0];
+  if(!file) return;
+  var isVideo=file.type.startsWith('video/');
+  // Vérifier taille max 50MB
+  if(file.size>50*1024*1024){toast('Fichier trop lourd (max 50 MB)','err');return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var dataUrl=e.target.result;
+    var srcEl=document.getElementById('post-media-src');
+    if(srcEl) srcEl.value=dataUrl;
+    var zone=document.getElementById('media-zone');
+    if(zone){
+      if(isVideo){
+        zone.innerHTML='<video src="'+dataUrl+'" style="width:100%;max-height:160px;border-radius:6px;object-fit:cover" controls muted playsinline></video>'+
+          '<div style="font-size:.85rem;color:var(--accent2);margin-top:.4rem">'+file.name+'</div>';
+      }else{
+        zone.innerHTML='<img src="'+dataUrl+'" style="width:100%;max-height:160px;border-radius:6px;object-fit:cover"/>'+
+          '<div style="font-size:.85rem;color:var(--accent2);margin-top:.4rem">'+file.name+'</div>';
+      }
+    }
+    toast((isVideo?'Vidéo':'Image')+' ajoutée ✓');
+  };
+  reader.onerror=function(){toast('Erreur lecture fichier','err');};
+  reader.readAsDataURL(file);
+}
+
 async function saveCourse(){
   var nom=document.getElementById('f-nom').value.trim();if(!nom){toast('Nom requis','err');return}
   var selPacks=Array.from(document.querySelectorAll('#mod-body input[type=checkbox]:checked')).map(function(cb){return cb.value});

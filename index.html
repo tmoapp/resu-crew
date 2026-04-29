@@ -2391,7 +2391,7 @@ function renderTStudents(){
   var h='<div class="sec-h"><h2>En attente ('+total+')</h2><button class="btn-add" onclick="openMod(\'newstudent\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Créer</button></div>';
   if(PENDING_ACCOUNTS.length){
     h+='<div class="card"><div style="font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Comptes à valider</div>';
-    PENDING_ACCOUNTS.forEach(function(p,i){h+='<div class="pend-row"><div><div style="font-size:1rem;font-weight:500">'+p.prenom+' '+p.nom+'</div><div style="font-size:1.1rem;color:var(--muted2)">'+p.email+' · '+p.niveau+'</div></div><div class="pend-actions"><button class="btn-approve" onclick="approvePending('+i+')">✓</button><button class="btn-reject" onclick="rejectPending('+i+')">✕</button></div></div>'});
+    PENDING_ACCOUNTS.forEach(function(p,i){h+='<div class="pend-row" style="cursor:pointer" onclick="openPendingDetail('+i+')"><div><div style="font-size:1rem;font-weight:500">'+p.prenom+' '+p.nom+'</div><div style="font-size:1.1rem;color:var(--muted2)">'+p.email+' · '+p.niveau+'</div></div><div class="pend-actions"><button class="btn-approve" onclick="event.stopPropagation();approvePending('+i+')">✓</button><button class="btn-reject" onclick="event.stopPropagation();rejectPending('+i+')">✕</button></div></div>';});
     h+='</div>';
   }
   if(INSCRIPTION_REQUESTS.length){

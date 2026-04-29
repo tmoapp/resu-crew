@@ -1486,24 +1486,143 @@ async function submitInsReq(courseIdx){
 // ── STUDENT PROFILE ──
 function openStudentProfile(i){
   CURRENT_STUDENT=i;var s=STUDENTS[i];
-  var aH=s.photo?'<img src="'+s.photo+'" alt=""/>':ini(s);
-  var insH=s.inscriptions.length===0?'<div class="empty">Aucune inscription</div>':s.inscriptions.map(function(ins){
-    var co=getCourse(ins.courseId);var pk=getPack(ins.packId);
-    if(ins.type==='illimite'){return'<div style="padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,0.04)"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:1rem;font-weight:500">'+co.nom+'</div><div style="font-size:1.1rem;color:var(--muted2)">'+co.jour+' · '+pk.nom+'</div></div><span class="badge bg-purple">∞</span></div><div style="font-size:1rem;color:var(--muted);margin-top:.2rem">'+(ins.assiste||0)+' séances · '+ins.paye+' €</div></div>'}
-    var pct=Math.round(((ins.total||0)-(ins.restant||0))/(ins.total||1)*100);
-    return'<div style="padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,0.04)"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:1rem;font-weight:500">'+co.nom+'</div><div style="font-size:1.1rem;color:var(--muted2)">'+co.jour+' · '+pk.nom+'</div></div><span style="font-weight:700;color:'+(ins.restant===0?'#E05555':'var(--gold)')+'">'+ins.restant+'/'+ins.total+'</span></div><div class="pbar"><div class="pfill" style="width:'+pct+'%"></div></div><div style="font-size:1rem;color:var(--muted);margin-top:.3rem">'+ins.paye+' € réglés</div></div>';
-  }).join('');
-  var html='<div class="profile-back"><button onclick="closeStudentProfile()">←</button><span>Dossier élève</span></div>'+
-    '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.3rem;padding-bottom:1.1rem;border-bottom:1px solid var(--border)"><div class="profile-av-big" style="'+(s.photo?'padding:0':'')+'">'+aH+'</div>'+
-    '<div style="flex:1"><div style="font-size:1.1rem;font-weight:700">'+s.prenom+' '+s.nom+'</div><div style="font-size:1rem;color:var(--muted);margin:.2rem 0;letter-spacing:.04em">'+s.id+'</div><span class="badge '+(s.st==='Actif'?'bg-green':'bg-red')+'">'+s.st+'</span></div></div>'+
+  var aH=s.photo?'<img src="'+s.photo+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>':ini(s);
+  var insH='';
+  if(!s.inscriptions.length){
+    insH='<div class="empty">Aucune inscription</div>';
+  }else{
+    insH=s.inscriptions.map(function(ins,ci){
+      var co=getCourse(ins.courseId);var pk=getPack(ins.packId);
+      var info=ins.type==='illimite'?'<span class="badge bg-purple">∞</span>':'<span style="font-weight:700;color:'+(ins.restant===0?'#E05555':'var(--gold)')+'">'+ins.restant+'/'+ins.total+'</span>';
+      var sub=ins.type==='illimite'?(ins.assiste||0)+' séances · '+ins.paye+' €':ins.paye+' € réglés';
+      return '<div style="padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,0.04)">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+          '<div><div style="font-size:1rem;font-weight:500">'+co.nom+'</div>'+
+          '<div style="font-size:.85rem;color:var(--muted2)">'+co.jour+' · '+pk.nom+'</div></div>'+
+          '<div style="display:flex;align-items:center;gap:.5rem">'+info+
+            '<button onclick="removeInscription('+i+','+ci+')" style="padding:2px 6px;border-radius:4px;border:1px solid rgba(220,50,50,0.3);background:rgba(220,50,50,0.1);color:#E05555;cursor:pointer;font-size:.75rem;font-family:Outfit,sans-serif">✕</button>'+
+          '</div>'+
+        '</div>'+
+        '<div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">'+sub+'</div>'+
+      '</div>';
+    }).join('');
+  }
+  var html=
+    '<div class="profile-back"><button onclick="closeStudentProfile()">←</button><span>Dossier élève</span></div>'+
+    '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.3rem;padding-bottom:1.1rem;border-bottom:1px solid var(--border)">'+
+      '<div class="profile-av-big" style="'+(s.photo?'padding:0':'')+'">'+aH+'</div>'+
+      '<div style="flex:1"><div style="font-size:1.1rem;font-weight:700">'+s.prenom+' '+s.nom+'</div>'+
+      '<div style="font-size:1rem;color:var(--muted);margin:.2rem 0">'+s.id+'</div>'+
+      '<span class="badge '+(s.st===' ctif'||s.st==='Actif'?'bg-green':'bg-red')+'">'+s.st+'</span></div></div>'+
     '<div class="card">'+[['Email',s.email],['Téléphone',s.tel||'—'],['Naissance',s.dob||'—'],['Niveau',s.niveau]].map(function(r){return'<div class="info-row"><span class="info-label">'+r[0]+'</span><span style="font-size:1rem">'+r[1]+'</span></div>'}).join('')+'</div>'+
-    '<div class="card"><div style="font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem">Inscriptions</div>'+insH+'</div>'+
-    '<div class="card" style="display:flex;justify-content:space-between;align-items:center"><div><div class="info-label">Total réglé</div><div style="font-size:1.6rem;font-weight:700;color:var(--gold);font-family:\'Bebas Neue\',sans-serif;margin-top:.2rem">'+s.montant+' €</div></div><div style="font-size:1.05rem;color:var(--muted)">'+s.inscriptions.length+' abonnement'+(s.inscriptions.length>1?'s':'')+'</div></div>'+
-    '<div style="display:flex;gap:.6rem;margin-top:.8rem"><button class="btn-add" style="flex:1;justify-content:center;padding:.6rem" onclick="closeMod();openMod(\'editstudent\','+i+')">✏ Modifier</button><button class="delete-btn" onclick="deleteStudent('+i+')">Supprimer</button></div>';
+    '<div class="card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem">'+
+        '<div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Inscriptions</div>'+
+        '<button onclick="openAddInscription('+i+')" style="display:flex;align-items:center;gap:.3rem;padding:.3rem .7rem;border-radius:5px;border:1px solid var(--accent);background:rgba(42,127,232,0.1);color:var(--accent);cursor:pointer;font-family:Outfit,sans-serif;font-size:.8rem;font-weight:600">+ Ajouter</button>'+
+      '</div>'+
+      insH+
+    '</div>'+
+    '<div class="card" style="display:flex;justify-content:space-between;align-items:center">'+
+      '<div><div class="info-label">Total réglé</div>'+
+      '<div style="font-size:1.6rem;font-weight:700;color:var(--gold);font-family:Bebas Neue,sans-serif;margin-top:.2rem">'+s.montant+' €</div></div>'+
+      '<div style="font-size:1.05rem;color:var(--muted)">'+s.inscriptions.length+' abonnement'+(s.inscriptions.length>1?'s':'')+'</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:.6rem;margin-top:.8rem">'+
+      '<button class="btn-add" style="flex:1;justify-content:center;padding:.6rem" onclick="closeMod();openMod(&quot;editstudent&quot;,'+i+')">&#9999; Modifier</button>'+
+      '<button class="delete-btn" onclick="deleteStudent('+i+')">Supprimer</button>'+
+    '</div>';
   document.getElementById('profile-inner-body').innerHTML=html;
   document.getElementById('profile-ov').classList.add('open');
 }
 function closeStudentProfile(){document.getElementById('profile-ov').classList.remove('open')}
+
+function openAddInscription(studentIdx){
+  var s=STUDENTS[studentIdx];
+  var T=document.getElementById('mod-title');
+  var B=document.getElementById('mod-body');
+  document.getElementById('mod-ov').classList.add('open');
+  T.textContent='Inscrire '+s.prenom+' '+s.nom;
+  var availCourses=COURSES.filter(function(co){
+    return !s.inscriptions.some(function(ins){return ins.courseId===co.id;});
+  });
+  if(!availCourses.length){B.innerHTML='<div class="empty">Inscrit(e) à tous les cours disponibles.</div><div class="modal-actions"><button class="btn-cancel" style="flex:1" onclick="closeMod()">Fermer</button></div>';return;}
+  var coursHtml=availCourses.map(function(co,i){
+    return'<div class="pack-option'+(i===0?' selected':'')+'" onclick="selPack(this,this.dataset.pack)" data-pack="'+co.id+'">'+
+      '<div><div style="font-size:.9rem;font-weight:600">'+co.nom+'</div>'+
+      '<div style="font-size:.75rem;color:var(--muted2)">'+co.jour+'</div></div>'+
+    '</div>';
+  }).join('');
+  var packsHtml=PACKS.map(function(pk,i){
+    return'<div class="pack-option'+(i===0?' selected':'')+'" onclick="selPack2(this)" data-pkid="'+pk.id+'" data-prix="'+pk.prix+'" data-type="'+pk.type+'" data-seances="'+(pk.seances||0)+'">'+
+      '<div><div style="font-size:.9rem;font-weight:600">'+pk.nom+'</div>'+
+      '<div style="font-size:.75rem;color:var(--muted2)">'+(pk.type==='illimite'?'Illimité':pk.seances+' séances')+'</div></div>'+
+      '<div style="font-size:.9rem;font-weight:700;color:var(--gold)">'+pk.prix+' €</div>'+
+    '</div>';
+  }).join('');
+  B.innerHTML=
+    '<div class="field-row"><label>Cours</label></div>'+coursHtml+
+    '<div class="field-row" style="margin-top:.8rem"><label>Pack</label></div>'+packsHtml+
+    '<div class="modal-actions">'+
+      '<button class="btn-primary" style="flex:1" onclick="confirmAddInscription('+studentIdx+')">Inscrire</button>'+
+      '<button class="btn-cancel" onclick="closeMod()">Annuler</button>'+
+    '</div>';
+}
+
+function selPack2(el){
+  document.querySelectorAll('[data-pkid]').forEach(function(x){x.classList.remove('selected')});
+  el.classList.add('selected');
+}
+
+async function confirmAddInscription(studentIdx){
+  var s=STUDENTS[studentIdx];
+  var selCo=document.querySelector('.pack-option[data-pack].selected');
+  var selPk=document.querySelector('.pack-option[data-pkid].selected');
+  if(!selCo||!selPk){toast('Choisissez un cours et un pack','err');return;}
+  var courseId=selCo.dataset.pack;
+  var packId=selPk.dataset.pkid;
+  var prix=parseFloat(selPk.dataset.prix)||0;
+  var type=selPk.dataset.type;
+  var seances=parseInt(selPk.dataset.seances)||0;
+  var insRow={eleve_id:s.id,cours_id:courseId,pack_id:packId,type:type,montant_paye:prix};
+  if(type==='illimite'){insRow.seances_assistees=0;}else{insRow.seances_restantes=seances;insRow.seances_total=seances;}
+  if(SUPABASE_READY){
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
+    var r=await fetch(SUPABASE_URL+'/rest/v1/inscriptions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=representation'},
+      body:JSON.stringify(insRow)
+    });
+    if(!r.ok){var t=await r.text();toast('Erreur: '+t,'err');return;}
+  }
+  var localIns={courseId:courseId,packId:packId,type:type,paye:prix};
+  if(type==='illimite'){localIns.assiste=0;}else{localIns.restant=seances;localIns.total=seances;}
+  s.inscriptions.push(localIns);
+  s.montant+=prix;
+  var co=getCourse(courseId);if(co)co.inscrits=(co.inscrits||0)+1;
+  closeMod();
+  toast(s.prenom+' inscrit(e) \u2713');
+  openStudentProfile(studentIdx);
+}
+
+async function removeInscription(studentIdx,insIdx){
+  var s=STUDENTS[studentIdx];
+  var ins=s.inscriptions[insIdx];
+  var co=getCourse(ins.courseId);
+  if(!confirm('Désinscrire '+s.prenom+' de '+co.nom+' ?'))return;
+  if(SUPABASE_READY){
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
+    var r=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?eleve_id=eq.'+s.id+'&cours_id=eq.'+ins.courseId,{
+      method:'DELETE',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok,'Prefer':'return=minimal'}
+    });
+    if(!r.ok){var t=await r.text();toast('Erreur: '+r.status,'err');return;}
+  }
+  s.montant-=ins.paye||0;
+  s.inscriptions.splice(insIdx,1);
+  if(co)co.inscrits=Math.max(0,(co.inscrits||1)-1);
+  toast(s.prenom+' désinscrit(e) \u2713');
+  openStudentProfile(studentIdx);
+}
 
 // ── FEED ──
 function getNextSession(cours){

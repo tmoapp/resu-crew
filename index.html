@@ -956,7 +956,7 @@ function openMod(type,idx){
   }else if(type==='prof'){
     var pr=EDIT_IDX>=0?PROFS[EDIT_IDX]:null;
     T.textContent=pr?'Modifier le profil':'Ajouter un professeur';
-    var stylesChecks=DANCE_STYLES.map(function(s){var chk=pr&&pr.styles&&pr.styles.indexOf(s)>=0;return'<label style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;cursor:pointer;font-size:1.1rem"><input type="checkbox" value="'+s+'" '+(chk?'checked':'')+' style="accent-color:var(--accent)"/> '+s+'</label>'}).join('');
+    var stylesChecks=DANCE_STYLES.map(function(s,si){var chk=pr&&pr.styles&&pr.styles.indexOf(s)>=0;return'<div style="display:flex;align-items:center;justify-content:space-between;padding:.2rem 0"><label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:1rem;flex:1"><input type="checkbox" value="'+s+'" '+(chk?'checked':'')+' style="accent-color:var(--accent)"/> '+s+'</label><button type="button" onclick="deleteStyleInline('+si+',this)" style="background:none;border:none;color:rgba(220,50,50,0.5);cursor:pointer;font-size:.9rem;padding:0 .3rem;line-height:1;flex-shrink:0" title="Supprimer ce style">✕</button></div>';}).join('');
     B.innerHTML=
       '<div class="photo-zone" id="prof-photo-zone" onclick="simPhoto(\'prof-photo-zone\',\'prof-photo-data\')">'+
         (pr&&pr.photo?'<img src="'+pr.photo+'" alt=""/>':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--muted)"><circle cx="12" cy="12" r="4"/><path d="M20 7h-3l-2-2H9L7 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg><div class="photo-zone-txt">Photo</div>')+
@@ -2504,6 +2504,21 @@ function addStyleInline(){
     var inp=document.getElementById('new-style-val');
     if(inp)inp.focus();
   }
+}
+
+async function deleteStyleInline(si, btn){
+  var nom=DANCE_STYLES[si];
+  if(!nom)return;
+  if(!confirm('Supprimer le style "'+nom+'" ?'))return;
+  if(SUPABASE_READY){
+    var {data}=await sb.from('styles').select('id').eq('nom',nom).single();
+    if(data){var ok=await sbDelete('styles',data.id);if(!ok)return;}
+  }
+  DANCE_STYLES.splice(si,1);
+  // Retirer la ligne du DOM sans fermer la modal
+  var row=btn.closest('div[style*=justify-content]');
+  if(row)row.remove();
+  toast(nom+' supprimé ✓');
 }
 
 async function confirmAddStyleInline(){

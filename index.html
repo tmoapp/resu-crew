@@ -427,13 +427,10 @@ function initSupabase() {
     return false;
   }
   try {
-    var opts = {
+    // Créer le client UNE SEULE FOIS sans token (anon)
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-    };
-    if (RC_TOKEN) {
-      opts.global = { headers: { 'Authorization': 'Bearer ' + RC_TOKEN } };
-    }
-    sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, opts);
+    });
     console.log('[RC] Supabase connecté');
     return true;
   } catch(e) {
@@ -442,12 +439,14 @@ function initSupabase() {
   }
 }
 
+// Ne pas recréer le client - mettre à jour le token dans les headers fetch directs
+// Le client sb est utilisé avec .auth() manuel via RC_TOKEN dans chaque fetch
 function reinitSbWithToken() {
-  if (!SUPABASE_READY || !RC_TOKEN) return;
-  sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-    global: { headers: { 'Authorization': 'Bearer ' + RC_TOKEN } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-  });
+  // No-op : on n'utilise plus createClient() plusieurs fois.
+  // RC_TOKEN est utilisé directement dans chaque fetch via: RC_TOKEN||localStorage.getItem('rc-token')
+  if(RC_TOKEN && sb) {
+    try { sb.realtime.setAuth(RC_TOKEN); } catch(e) {}
+  }
 }
 
 // ── Récupère le meilleur token disponible ──
@@ -965,7 +964,19 @@ function openMod(type,idx){
       '<input type="hidden" id="prof-photo-data" value="'+(pr&&pr.photo?pr.photo:'')+'"/>'+
       '<div class="row2"><div class="field-row"><label>Prénom</label><input class="inp" id="pr-pn" value="'+(pr?pr.prenom:'')+'" placeholder="Sophie" style="margin:0"/></div><div class="field-row"><label>Nom</label><input class="inp" id="pr-nm" value="'+(pr?pr.nom:'')+'" placeholder="Martin" style="margin:0"/></div></div>'+
       '<div class="field-row" style="margin-top:.4rem"><label>Description</label><textarea class="inp" id="pr-desc" placeholder="Parcours, spécialités, pédagogie...">'+(pr?pr.desc:'')+'</textarea></div>'+
-      '<div class="field-row"><label>Styles enseignés</label>'+stylesChecks+'</div>'+
+      '<div class="field-row">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">'+
+          '<label style="margin:0">Styles enseignés</label>'+
+          '<button type="button" onclick="addStyleInline()" style="display:flex;align-items:center;gap:.3rem;padding:.25rem .6rem;border-radius:5px;border:1px solid var(--accent);background:rgba(42,127,232,0.1);color:var(--accent);cursor:pointer;font-family:Outfit,sans-serif;font-size:.78rem;font-weight:600">+ Nouveau style</button>'+
+        '</div>'+
+        '<div id="styles-checklist">'+stylesChecks+'</div>'+
+        '<div id="new-style-inline" style="display:none;margin-top:.5rem;display:none">'+
+          '<div style="display:flex;gap:.5rem">'+
+            '<input class="inp" id="new-style-val" placeholder="Ex: Tango, Kizomba..." style="flex:1;margin:0"/>'+
+            '<button type="button" onclick="confirmAddStyleInline()" style="padding:.55rem .9rem;border-radius:6px;border:none;background:var(--accent);color:white;font-family:Outfit,sans-serif;font-size:.85rem;font-weight:600;cursor:pointer;flex-shrink:0">Ajouter</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
       '<div class="modal-actions"><button class="btn-primary" style="flex:1" onclick="saveProf()">'+(pr?'Enregistrer':'Ajouter')+'</button><button class="btn-cancel" onclick="closeMod()">Annuler</button></div>';
 
   }else if(type==='newstudent'){
@@ -1512,7 +1523,7 @@ function openStudentProfile(i){
     '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.3rem;padding-bottom:1.1rem;border-bottom:1px solid var(--border)">'+
       '<div class="profile-av-big" style="'+(s.photo?'padding:0':'')+'">'+aH+'</div>'+
       '<div style="flex:1"><div style="font-size:1.1rem;font-weight:700">'+s.prenom+' '+s.nom+'</div>'+
-      '<div style="font-size:1rem;color:var(--muted);margin:.2rem 0">'+s.id+'</div>'+
+      
       '<span class="badge '+(s.st===' ctif'||s.st==='Actif'?'bg-green':'bg-red')+'">'+s.st+'</span></div></div>'+
     '<div class="card">'+[['Email',s.email],['Téléphone',s.tel||'—'],['Naissance',s.dob||'—'],['Niveau',s.niveau]].map(function(r){return'<div class="info-row"><span class="info-label">'+r[0]+'</span><span style="font-size:1rem">'+r[1]+'</span></div>'}).join('')+'</div>'+
     '<div class="card">'+
@@ -2485,6 +2496,39 @@ async function removeStyle(i){
   DANCE_STYLES.splice(i,1);tPage('courses');
 }
 
+function addStyleInline(){
+  var zone=document.getElementById('new-style-inline');
+  if(!zone)return;
+  zone.style.display=zone.style.display==='none'?'block':'none';
+  if(zone.style.display==='block'){
+    var inp=document.getElementById('new-style-val');
+    if(inp)inp.focus();
+  }
+}
+
+async function confirmAddStyleInline(){
+  var inp=document.getElementById('new-style-val');
+  if(!inp||!inp.value.trim()){toast('Entrez un nom de style','err');return;}
+  var nom=inp.value.trim();
+  if(DANCE_STYLES.indexOf(nom)>=0){toast('Ce style existe déjà','err');return;}
+  if(SUPABASE_READY){
+    var res=await sbInsert('styles',{nom:nom});
+    if(!res)return;
+  }
+  DANCE_STYLES.push(nom);
+  // Ajouter la checkbox dans la liste sans fermer la modal
+  var list=document.getElementById('styles-checklist');
+  if(list){
+    var label=document.createElement('label');
+    label.style.cssText='display:flex;align-items:center;gap:.5rem;padding:.3rem 0;cursor:pointer;font-size:1.1rem';
+    label.innerHTML='<input type="checkbox" value="'+nom+'" checked style="accent-color:var(--accent)"/> '+nom;
+    list.appendChild(label);
+  }
+  inp.value='';
+  document.getElementById('new-style-inline').style.display='none';
+  toast(nom+' ajouté ✓');
+}
+
 function renderTProfs(){
   var h='<div class="sec-h"><h2>Professeurs ('+PROFS.length+')</h2><button class="btn-add" onclick="openMod(\'prof\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Ajouter</button></div>';
   PROFS.forEach(function(pr,i){
@@ -2729,7 +2773,7 @@ function renderSQR(s){
     '<div style="font-size:1rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.3rem">À présenter avant chaque cours</div>'+
     '<div id="student-qr-box"></div>'+
     '<div style="font-size:1.05rem;font-weight:600;margin-bottom:.2rem">'+s.prenom+' '+s.nom+'</div>'+
-    '<div style="font-size:1rem;color:var(--muted);margin-bottom:.9rem">'+s.id+'</div>'+
+    
     '<div>'+s.inscriptions.map(function(ins){var co=getCourse(ins.courseId);return'<span class="chip">'+co.jour+' · '+co.nom+'</span>'}).join('')+'</div>'+
     '<div style="margin-top:.9rem;padding:.65rem 1rem;background:var(--bg2);border-radius:8px;border:1px solid var(--border);display:inline-block;font-size:1.1rem;color:var(--muted2)">Séances restantes : <span style="color:var(--gold);font-weight:700">'+s.inscriptions.reduce(function(a,i){return i.type==='illimite'?a:a+(i.restant||0)},0)+'</span></div></div>';
 }
@@ -2738,7 +2782,7 @@ function renderSProfile(s){
   return'<div style="text-align:center;padding:1.5rem 0 1rem">'+
     '<div class="profile-av-big" style="margin:0 auto .9rem;width:72px;height:72px;font-size:1.5rem;'+(s.photo?'padding:0':'')+'">'+aH+'</div>'+
     '<div style="font-size:1.1rem;font-weight:700">'+s.prenom+' '+s.nom+'</div>'+
-    '<div style="font-size:1.1rem;color:var(--muted);margin:.2rem 0">'+s.id+'</div>'+
+    
     '<span class="badge '+(s.st==='Actif'?'bg-green':'bg-red')+'">'+s.st+'</span></div>'+
     '<div class="stat-grid"><div class="stat-box"><div class="stat-n">'+s.inscriptions.length+'</div><div class="stat-l">Cours</div></div><div class="stat-box"><div class="stat-n" style="color:var(--gold)">'+s.montant+' €</div><div class="stat-l">Réglé</div></div></div>'+
     '<div class="card">'+[['Email',s.email],['Téléphone',s.tel||'—'],['Naissance',s.dob||'—'],['Niveau',s.niveau]].map(function(r){return'<div class="info-row"><span class="info-label">'+r[0]+'</span><span style="font-size:1rem">'+r[1]+'</span></div>'}).join('')+'</div>'+

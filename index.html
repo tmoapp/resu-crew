@@ -608,13 +608,9 @@ var STUDENTS=[
    inscriptions:[{courseId:'c2',packId:'p4',type:'illimite',assiste:22,paye:480},{courseId:'c4',packId:'p2',type:'seances',restant:6,total:10,paye:170}],st:'Actif',montant:650},
 ];
 
-var PENDING_ACCOUNTS=[
-  {nom:'Vidal',prenom:'Clara',email:'clara@email.fr',tel:'+33 6 11 22 33 44',dob:'2000-03-15',niveau:'Débutant',photo:null},
-];
+var PENDING_ACCOUNTS=[];
 
-var INSCRIPTION_REQUESTS=[
-  {id:'req1',studentId:'RC-JL-002',courseId:'c1',packId:'p2',date:'10/01/2024',msg:'Je souhaite rejoindre la Salsa.'},
-];
+var INSCRIPTION_REQUESTS=[];
 
 async function loadFromSupabase(){
   if(!SUPABASE_READY) return;
@@ -698,11 +694,7 @@ async function loadFromSupabase(){
 }
 
 
-var POSTS=[
-  {id:'post1',author:'Sophie Martin',authorInit:'SM',date:'Il y a 2h',titre:'Session Salsa 🔥',desc:'Répétition du footwork — les progrès sont incroyables !',mediaType:'image',mediaSrc:'https://images.unsplash.com/photo-1504609773096-104ff2c73ba4?w=800&q=70&auto=format',likes:24,likedBy:[],comments:[{author:'Marie D.',text:'Super cours !',id:'cm1'}],showComments:false},
-  {id:'post2',author:'Lucas Fontaine',authorInit:'LF',date:'Hier',titre:'Hip-hop Battle Training',desc:'Les avancés ont géré le battle ce soir.',mediaType:'video',mediaSrc:null,bg:'#040810',em:'🎵',likes:31,likedBy:[],comments:[{author:'Emma B.',text:'Magnifique !',id:'cm2'}],showComments:false},
-  {id:'post3',author:'Amara Diallo',authorInit:'AD',date:'Il y a 3j',titre:'Afrobeat Fusion ✨',desc:'Nouvelle chorégraphie sur un rythme Afrobeats — vous allez adorer !',mediaType:'image',mediaSrc:'https://images.unsplash.com/photo-1518834107812-67b0b7c58434?w=800&q=70&auto=format',likes:18,likedBy:[],comments:[],showComments:false},
-];
+var POSTS=[];
 
 // ── UTILS ──
 function ini(s){return((s.prenom||'')[0]||'').toUpperCase()+((s.nom||'')[0]||'').toUpperCase()}

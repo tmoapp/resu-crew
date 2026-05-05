@@ -609,8 +609,8 @@ async function loadFromSupabase(){
     // Compter les inscrits réels par cours (reset d'abord)
     COURSES.forEach(function(co){co.inscrits=0;});
     var _icRes=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?select=cours_id',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
-    var insData={data:_icRes.ok?await _icRes.json():[]};
-    if(insData){
+    var insData=_icRes.ok?await _icRes.json():[];
+    if(insData&&insData.length){
       insData.forEach(function(ins){
         var co=COURSES.find(function(x){return x.id===ins.cours_id;});
         if(co) co.inscrits=(co.inscrits||0)+1;
@@ -623,16 +623,13 @@ async function loadFromSupabase(){
       return{id:p.id,author:p.author_name||'Prof',authorInit:initials,date:new Date(p.created_at).toLocaleDateString('fr'),titre:p.titre,desc:p.description||'',mediaType:p.media_type||'video',mediaSrc:p.media_url,bg:'#040810',em:'📸',likes:p.likes_count||0,likedBy:[],comments:[],showComments:false};
     });
     if(CURRENT_PROFILE&&CURRENT_PROFILE.role==='prof'){
-      var _elevRes=await fetch(SUPABASE_URL+'/rest/v1/profiles?role=eq.eleve&order=created_at',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
-      var _elevData=_elevRes.ok?await _elevRes.json():[];
-      var eleves={data:_elevData};
+      var eleves=await sb.from('profiles').select('*').eq('role','eleve').order('created_at');
       if(eleves.data){
         STUDENTS=eleves.data.filter(function(e){return e.statut==='actif';}).map(function(e){
           return{id:e.id,nom:e.nom,prenom:e.prenom,email:e.email,tel:e.tel||'',dob:e.dob||'',niveau:e.niveau||'Débutant',photo:e.photo_url,inscriptions:[],st:'Actif',montant:0};
         });
         for(var si=0;si<STUDENTS.length;si++){
-          var _sinRes=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?eleve_id=eq.'+STUDENTS[si].id,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
-          var sins=_sinRes.ok?await _sinRes.json():[];
+          var {data:sins}=await sb.from('inscriptions').select('*').eq('eleve_id',STUDENTS[si].id);
           STUDENTS[si].inscriptions=(sins||[]).map(function(i){return{courseId:i.cours_id,packId:i.pack_id,type:i.type,restant:i.seances_restantes,total:i.seances_total,assiste:i.seances_assistees||0,paye:parseFloat(i.montant_paye||0)};});
           STUDENTS[si].montant=STUDENTS[si].inscriptions.reduce(function(a,i){return a+i.paye;},0);
         }
@@ -641,15 +638,12 @@ async function loadFromSupabase(){
         pending.forEach(function(e){
           PENDING_ACCOUNTS.push({dbId:e.id,isProfile:true,nom:e.nom||'',prenom:e.prenom||'',email:e.email,tel:e.tel||'',dob:e.dob||'',niveau:e.niveau||'Débutant',photo:e.photo_url});
         });
-        var _diRes=await fetch(SUPABASE_URL+'/rest/v1/demandes_inscription?statut=eq.attente&order=created_at',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
-        var _diData=_diRes.ok?await _diRes.json():[];
-        var demandesIns={data:_diData};
+        var demandesIns=await sb.from('demandes_inscription').select('*').eq('statut','attente').order('created_at');
         if(demandesIns.data) INSCRIPTION_REQUESTS=demandesIns.data.map(function(d){
           return{id:d.id,studentId:d.eleve_id,courseId:d.cours_id,packId:d.pack_id,date:new Date(d.created_at).toLocaleDateString('fr'),msg:d.message||''};
         });
-        // Charger les réservations séance unique
-        var _rsRes=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?statut=in.(attente,confirme)&order=created_at',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
-        RESERVATIONS_SEANCE=_rsRes.ok?await _rsRes.json():[];
+        var resaData=await sb.from('reservations_seance').select('*').eq('statut','attente').order('created_at');
+        if(resaData.data) RESERVATIONS_SEANCE=resaData.data;
       }
     }
     // Charger les séances (pour élèves et profs)

@@ -284,7 +284,7 @@ select.inp option{background:#0d1120}textarea.inp{resize:vertical;min-height:80p
       <div class="field-row" style="margin-top:.4rem"><label for="r-em">Email</label><input class="inp" id="r-em" type="email" placeholder="marie@email.com"/></div>
       <div class="field-row"><label for="r-tel">Téléphone</label><input class="inp" id="r-tel" placeholder="+33 6 XX XX XX XX"/></div>
       <div class="field-row"><label for="r-dob">Date de naissance</label><input class="inp" id="r-dob" type="date"/></div>
-      <div class="field-row"><label for="r-niv">Niveau</label><select class="inp" id="r-niv"><option>Débutant</option><option>Intermédiaire</option><option>Avancé</option></select></div>
+      <input type="hidden" id="r-niv" value="Débutant"/>
       <div class="field-row"><label for="r-pw">Mot de passe</label><input class="inp" id="r-pw" type="password" placeholder="Choisissez un mot de passe (6 caractères min)"/></div>
       <button class="btn-primary" onclick="submitRegister()">Envoyer la demande</button>
     </div>
@@ -464,22 +464,52 @@ async function sbLoad(table, query) {
 
 async function sbInsert(table, row) {
   if (!SUPABASE_READY) return null;
-  var { data, error } = await sb.from(table).insert(row).select().single();
-  if (error) { toast(error.message, 'err'); return null; }
-  return data;
+  var tok = RC_TOKEN || localStorage.getItem('rc-token') || SUPABASE_KEY;
+  var r = await fetch(SUPABASE_URL + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + tok,
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify(row)
+  });
+  if (!r.ok) { var t = await r.text(); toast('Erreur ' + r.status + ': ' + t, 'err'); return null; }
+  var d = await r.json();
+  return Array.isArray(d) ? d[0] : d;
 }
 
 async function sbUpdate(table, id, row) {
   if (!SUPABASE_READY) return null;
-  var { data, error } = await sb.from(table).update(row).eq('id', id).select().single();
-  if (error) { toast(error.message, 'err'); return null; }
-  return data;
+  var tok = RC_TOKEN || localStorage.getItem('rc-token') || SUPABASE_KEY;
+  var r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?id=eq.' + id, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + tok,
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify(row)
+  });
+  if (!r.ok) { var t = await r.text(); toast('Erreur ' + r.status + ': ' + t, 'err'); return null; }
+  var d = await r.json();
+  return Array.isArray(d) ? d[0] : d;
 }
 
 async function sbDelete(table, id) {
   if (!SUPABASE_READY) return false;
-  var { error } = await sb.from(table).delete().eq('id', id);
-  if (error) { toast(error.message, 'err'); return false; }
+  var tok = RC_TOKEN || localStorage.getItem('rc-token') || SUPABASE_KEY;
+  var r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?id=eq.' + id, {
+    method: 'DELETE',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + tok,
+      'Prefer': 'return=minimal'
+    }
+  });
+  if (!r.ok) { var t = await r.text(); toast('Erreur ' + r.status + ': ' + t, 'err'); return false; }
   return true;
 }
 
@@ -505,14 +535,17 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (RC_TOKEN && userId) {
     try {
       reinitSbWithToken();
-      var { data: prof, error: pErr } = await sb.from('profiles').select('*').eq('id', userId).single();
+      var _profRes=await fetch(SUPABASE_URL+'/rest/v1/profiles?id=eq.'+userId+'&limit=1',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+      var _profArr=_profRes.ok?await _profRes.json():[];
+      var prof=_profArr[0]||null; var pErr=!prof;
       if (!pErr && prof && prof.statut === 'actif') {
         CURRENT_PROFILE = prof; ROLE = prof.role; CURRENT_USER = { id: userId };
         await loadFromSupabase();
         if (ROLE === 'prof') {
           updTeacherTopbar(); goTo('s-teacher'); tPage('feed');
         } else {
-          var { data: ins } = await sb.from('inscriptions').select('*').eq('eleve_id', userId);
+          var _ir0=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?eleve_id=eq.'+userId,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+          var ins=_ir0.ok?await _ir0.json():[];
           CURRENT_PROFILE.inscriptions = (ins || []).map(function(i) {
             return { courseId: i.cours_id, packId: i.pack_id, type: i.type, restant: i.seances_restantes, total: i.seances_total, assiste: i.seances_assistees || 0, paye: parseFloat(i.montant_paye || 0) };
           });
@@ -586,18 +619,26 @@ var INSCRIPTION_REQUESTS=[
 async function loadFromSupabase(){
   if(!SUPABASE_READY) return;
   try{
-    var [profs,cours,packs,styles,posts]=await Promise.all([
-      sb.from('profs').select('*').order('created_at'),
-      sb.from('cours').select('*').order('created_at'),
-      sb.from('packs').select('*').order('created_at'),
-      sb.from('styles').select('*').order('nom'),
-      sb.from('posts').select('*').order('created_at',{ascending:false}).limit(30),
+    var tok=RC_TOKEN||localStorage.getItem('rc-token')||SUPABASE_KEY;
+    var _h={'apikey':SUPABASE_KEY,'Authorization':'Bearer '+tok};
+    var [_pr,_co,_pa,_st,_po]=await Promise.all([
+      fetch(SUPABASE_URL+'/rest/v1/profs?order=created_at',{headers:_h}).then(function(r){return r.json();}),
+      fetch(SUPABASE_URL+'/rest/v1/cours?order=created_at',{headers:_h}).then(function(r){return r.json();}),
+      fetch(SUPABASE_URL+'/rest/v1/packs?order=created_at',{headers:_h}).then(function(r){return r.json();}),
+      fetch(SUPABASE_URL+'/rest/v1/styles?order=nom',{headers:_h}).then(function(r){return r.json();}),
+      fetch(SUPABASE_URL+'/rest/v1/posts?order=created_at&limit=30',{headers:_h}).then(function(r){return r.json();})
     ]);
+    var profs={data:Array.isArray(_pr)?_pr:[]};
+    var cours={data:Array.isArray(_co)?_co:[]};
+    var packs={data:Array.isArray(_pa)?_pa:[]};
+    var styles={data:Array.isArray(_st)?_st:[]};
+    var posts={data:Array.isArray(_po)?_po:[]};
     if(profs.data) PROFS=profs.data.map(function(p){return{id:p.id,prenom:p.prenom,nom:p.nom,photo:p.photo_url,styles:p.styles||[],desc:p.description||''};});
     if(cours.data) COURSES=cours.data.map(function(c){return{id:c.id,nom:c.nom,style:c.style,profId:c.prof_id,jour:c.jour,heure:c.heure?c.heure.substring(0,5):c.heure,duree:c.duree_min,places:c.places_max,inscrits:0,niveau:c.niveau,packs:c.packs_ids||[],tarif_seance:c.tarif_seance||null};});
     // Compter les inscrits réels par cours (reset d'abord)
     COURSES.forEach(function(co){co.inscrits=0;});
-    var {data:insData}=await sb.from('inscriptions').select('cours_id');
+    var _icRes=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?select=cours_id',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+    var insData={data:_icRes.ok?await _icRes.json():[]};
     if(insData){
       insData.forEach(function(ins){
         var co=COURSES.find(function(x){return x.id===ins.cours_id;});
@@ -611,13 +652,15 @@ async function loadFromSupabase(){
       return{id:p.id,author:p.author_name||'Prof',authorInit:initials,date:new Date(p.created_at).toLocaleDateString('fr'),titre:p.titre,desc:p.description||'',mediaType:p.media_type||'video',mediaSrc:p.media_url,bg:'#040810',em:'📸',likes:p.likes_count||0,likedBy:[],comments:[],showComments:false};
     });
     if(CURRENT_PROFILE&&CURRENT_PROFILE.role==='prof'){
-      var eleves=await sb.from('profiles').select('*').eq('role','eleve').order('created_at');
+      var _elevRes=await fetch(SUPABASE_URL+'/rest/v1/profiles?role=eq.eleve&order=created_at',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+      var eleves={data:_elevRes.ok?await _elevRes.json():[]};
       if(eleves.data){
         STUDENTS=eleves.data.filter(function(e){return e.statut==='actif';}).map(function(e){
           return{id:e.id,nom:e.nom,prenom:e.prenom,email:e.email,tel:e.tel||'',dob:e.dob||'',niveau:e.niveau||'Débutant',photo:e.photo_url,inscriptions:[],st:'Actif',montant:0};
         });
         for(var si=0;si<STUDENTS.length;si++){
-          var {data:sins}=await sb.from('inscriptions').select('*').eq('eleve_id',STUDENTS[si].id);
+          var _sinRes=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?eleve_id=eq.'+STUDENTS[si].id,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+          var sins={data:_sinRes.ok?await _sinRes.json():[]};
           STUDENTS[si].inscriptions=(sins||[]).map(function(i){return{courseId:i.cours_id,packId:i.pack_id,type:i.type,restant:i.seances_restantes,total:i.seances_total,assiste:i.seances_assistees||0,paye:parseFloat(i.montant_paye||0)};});
           STUDENTS[si].montant=STUDENTS[si].inscriptions.reduce(function(a,i){return a+i.paye;},0);
         }
@@ -626,29 +669,27 @@ async function loadFromSupabase(){
         pending.forEach(function(e){
           PENDING_ACCOUNTS.push({dbId:e.id,isProfile:true,nom:e.nom||'',prenom:e.prenom||'',email:e.email,tel:e.tel||'',dob:e.dob||'',niveau:e.niveau||'Débutant',photo:e.photo_url});
         });
-        var demandesIns=await sb.from('demandes_inscription').select('*').eq('statut','attente').order('created_at');
+        var _diRes=await fetch(SUPABASE_URL+'/rest/v1/demandes_inscription?statut=eq.attente&order=created_at',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+        var _diData=_diRes.ok?await _diRes.json():[];
+        var demandesIns={data:_diData};
         if(demandesIns.data) INSCRIPTION_REQUESTS=demandesIns.data.map(function(d){
           return{id:d.id,studentId:d.eleve_id,courseId:d.cours_id,packId:d.pack_id,date:new Date(d.created_at).toLocaleDateString('fr'),msg:d.message||''};
         });
         // Charger les réservations séance unique
-        var resaData=await sb.from('reservations_seance').select('*').eq('statut','attente').order('created_at');
-        if(resaData.data) RESERVATIONS_SEANCE=resaData.data;
+        var _rsRes=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?statut=in.(attente,confirme)&order=created_at',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+        RESERVATIONS_SEANCE=_rsRes.ok?await _rsRes.json():[];
       }
     }
     // Charger les séances (pour élèves et profs)
     var todayStr2=new Date().toISOString().split('T')[0];
     var futurStr2=new Date(Date.now()+120*24*60*60*1000).toISOString().split('T')[0];
-    var {data:seancesData}=await sb.from('seances').select('*')
-      .gte('date',todayStr2).lte('date',futurStr2).order('date');
-    if(seancesData) SEANCES=seancesData;
+    var _seaRes=await fetch(SUPABASE_URL+'/rest/v1/seances?date=gte.'+todayStr2+'&date=lte.'+futurStr2+'&order=date',{headers:_h});
+    SEANCES=_seaRes.ok?await _seaRes.json():[];
     // Charger les réservations de l'élève connecté
     if(CURRENT_PROFILE&&CURRENT_PROFILE.role==='eleve'&&CURRENT_USER){
       // Charger toutes les réservations sauf les annulées (pas refusées - on les garde pour affichage)
-      var {data:resaEleve}=await sb.from('reservations_seance').select('*')
-        .eq('eleve_id',CURRENT_USER.id)
-        .neq('statut','annule')
-        .order('date');
-      if(resaEleve) RESERVATIONS_SEANCE=resaEleve;
+      var _reRes=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?eleve_id=eq.'+CURRENT_USER.id+'&statut=neq.annule&order=date',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+      RESERVATIONS_SEANCE=_reRes.ok?await _reRes.json():[];
     }
     console.log('[RC] Données chargées depuis Supabase');
   }catch(e){
@@ -721,7 +762,8 @@ async function doLogin(){
     if(ROLE==='prof'){
       updTeacherTopbar();goTo('s-teacher');tPage('feed');
     }else{
-      var {data:ins}=await sb.from('inscriptions').select('*').eq('eleve_id',res.user.id);
+      var _ir1=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?eleve_id=eq.'+res.user.id,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+      var ins=_ir1.ok?await _ir1.json():[];
       CURRENT_PROFILE.inscriptions=(ins||[]).map(function(i){return{courseId:i.cours_id,packId:i.pack_id,type:i.type,restant:i.seances_restantes,total:i.seances_total,assiste:i.seances_assistees||0,paye:parseFloat(i.montant_paye||0)};});
       CURRENT_PROFILE.montant=(CURRENT_PROFILE.inscriptions||[]).reduce(function(a,i){return a+i.paye;},0);
       CURRENT_PROFILE.st='Actif';CURRENT_PROFILE.photo=prof.photo_url||null;
@@ -1172,8 +1214,8 @@ async function saveEditStudent(){
         else photoUrl=photoData;
       }catch(e){photoUrl=photoData;}
     }
-    var {error}=await sb.from('profiles').update({prenom:s.prenom,nom:s.nom,tel:s.tel,dob:s.dob||null,niveau:s.niveau,photo_url:photoUrl}).eq('id',s.id);
-    if(error){toast('Erreur: '+error.message,'err');return;}
+    var _pu1=await fetch(SUPABASE_URL+'/rest/v1/profiles?id=eq.'+s.id,{method:'PATCH',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'},body:JSON.stringify({prenom:s.prenom,nom:s.nom,tel:s.tel,dob:s.dob||null,niveau:s.niveau,photo_url:photoUrl})});
+    if(!_pu1.ok){var _t1=await _pu1.text();toast('Erreur: '+_t1,'err');return;}
   }
   s.photo=photoUrl;s.photo_url=photoUrl;
   closeMod();
@@ -1213,8 +1255,8 @@ async function saveOwnProfile(){
     var updateData={prenom:s.prenom,nom:s.nom,tel:s.tel,photo_url:photoUrl};
     if(s.dob)updateData.dob=s.dob;
     if(s.niveau)updateData.niveau=s.niveau;
-    var {error}=await sb.from('profiles').update(updateData).eq('id',CURRENT_USER.id);
-    if(error){toast('Erreur: '+error.message,'err');return;}
+    var _pu2=await fetch(SUPABASE_URL+'/rest/v1/profiles?id=eq.'+CURRENT_USER.id,{method:'PATCH',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'},body:JSON.stringify(updateData)});
+    if(!_pu2.ok){var _t2=await _pu2.text();toast('Erreur: '+_t2,'err');return;}
     if(pw1){
       var r=await fetch(SUPABASE_URL+'/auth/v1/user',{
         method:'PUT',
@@ -1249,7 +1291,7 @@ async function saveNewStudent(){
     if(suRes.error){toast('Erreur: '+suRes.error,'err');return;}
     var newUid=suRes.user?suRes.user.id:null;
     if(newUid){
-      await sb.from('profiles').upsert({id:newUid,role:'eleve',prenom:pn,nom:nm,email:email,tel:tel||'',dob:dob||null,niveau:niveau,photo_url:photo,statut:'actif'});
+      await fetch(SUPABASE_URL+'/rest/v1/profiles',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({id:newUid,role:'eleve',prenom:pn,nom:nm,email:email,tel:tel||'',dob:dob||null,niveau:niveau,photo_url:photo,statut:'actif'})});
       try{await sb.rpc('confirm_user_email',{user_id:newUid});}catch(e){console.warn('confirm:',e);}
       STUDENTS.push({id:newUid,nom:nm,prenom:pn,email:email,tel:tel||'',dob:dob||'',niveau:niveau,photo:photo,inscriptions:[],st:'Actif',montant:0});
     }
@@ -1672,8 +1714,9 @@ async function openCoursDetail(courseId){
   if(!co||!co.nom) return;
   // Recharger le vrai compte d'inscrits depuis Supabase
   if(SUPABASE_READY){
-    var {data:ins}=await sb.from('inscriptions').select('cours_id').eq('cours_id',courseId);
-    if(ins) co.inscrits=ins.length;
+    var _ir2=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?cours_id=eq.'+courseId+'&select=cours_id',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+    var ins=_ir2.ok?await _ir2.json():[];
+    co.inscrits=ins.length;
   }
   var ov=document.getElementById('cours-detail-ov');
   var inner=document.getElementById('cours-detail-inner');
@@ -1833,8 +1876,8 @@ async function openInscriptionModal(type){
     var seancesCo=SEANCES.filter(function(s){return s.cours_id===co.id&&s.statut==='actif';});
     if(!seancesCo.length&&SUPABASE_READY){
       var today=new Date().toISOString().split('T')[0];
-      var {data:sData}=await sb.from('seances').select('*')
-        .eq('cours_id',co.id).eq('statut','actif').gte('date',today).order('date');
+      var _sRes=await fetch(SUPABASE_URL+'/rest/v1/seances?cours_id=eq.'+co.id+'&statut=eq.actif&date=gte.'+today+'&order=date',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+      var sData=_sRes.ok?await _sRes.json():[];
       if(sData&&sData.length){
         // Merge into global SEANCES
         sData.forEach(function(s){if(!SEANCES.find(function(x){return x.id===s.id;}))SEANCES.push(s);});
@@ -1875,11 +1918,8 @@ async function submitInscription(type){
     var packId=sp.dataset.pack;
     var msg=document.getElementById('ins-msg');
     if(SUPABASE_READY){
-      var {error}=await sb.from('demandes_inscription').insert({
-        eleve_id:CURRENT_USER.id,cours_id:co.id,pack_id:packId,
-        statut:'attente',message:msg?msg.value:''
-      });
-      if(error){toast('Erreur: '+error.message,'err');return;}
+      var _diR=await fetch(SUPABASE_URL+'/rest/v1/demandes_inscription',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'},body:JSON.stringify({eleve_id:CURRENT_USER.id,cours_id:co.id,pack_id:packId,statut:'attente',message:msg?msg.value:''})});
+      if(!_diR.ok){var _diT=await _diR.text();toast('Erreur: '+_diT,'err');return;}
     }
     INSCRIPTION_REQUESTS.push({id:uid(),studentId:CURRENT_USER.id,courseId:co.id,packId:packId,date:new Date().toLocaleDateString('fr'),msg:msg?msg.value:''});
     closeMod();
@@ -1901,16 +1941,11 @@ async function submitInscription(type){
     if(dejaResa){toast('Vous avez déjà une réservation pour ce cours','err');closeMod();return;}
     if(SUPABASE_READY){
       // Double-vérification en base
-      var {data:existResa}=await sb.from('reservations_seance')
-        .select('id').eq('eleve_id',CURRENT_USER.id).eq('cours_id',co.id)
-        .not('statut','in','(annule,refuse)').limit(1);
+      var _erRes=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance?eleve_id=eq.'+CURRENT_USER.id+'&cours_id=eq.'+co.id+'&statut=not.in.(annule,refuse)&limit=1',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+      var existResa=_erRes.ok?await _erRes.json():[];
       if(existResa&&existResa.length>0){toast('Vous avez déjà une réservation pour ce cours','err');closeMod();return;}
-      var {error:e2}=await sb.from('reservations_seance').insert({
-        eleve_id:CURRENT_USER.id,cours_id:co.id,
-        seance_id:seanceId.startsWith('fake')?null:seanceId,
-        date:dateVal,montant:montant,statut:'attente'
-      });
-      if(e2){toast('Erreur: '+e2.message,'err');return;}
+      var _riRes=await fetch(SUPABASE_URL+'/rest/v1/reservations_seance',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'},body:JSON.stringify({eleve_id:CURRENT_USER.id,cours_id:co.id,seance_id:(!seanceId||seanceId.startsWith('fake'))?null:seanceId,date:dateVal,montant:montant,statut:'attente'})});
+      if(!_riRes.ok){var _riT=await _riRes.text();toast('Erreur: '+_riT,'err');return;}
     }
     // Mettre à jour RESERVATIONS_SEANCE local
     RESERVATIONS_SEANCE.push({
@@ -1996,10 +2031,8 @@ async function sendComment(postId){
   var author=ROLE==='prof'?profName:eleveName;
   var newComment={id:'local_'+Date.now(),author:author,text:texte};
   if(SUPABASE_READY&&CURRENT_USER){
-    var {data,error}=await sb.from('commentaires').insert({
-      post_id:postId,auteur_id:CURRENT_USER.id,texte:texte
-    }).select('id').single().catch(function(e){return{data:null,error:e};});
-    if(!error&&data) newComment.id=data.id;
+    var _cRes=await fetch(SUPABASE_URL+'/rest/v1/commentaires',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=representation'},body:JSON.stringify({post_id:postId,auteur_id:CURRENT_USER.id,texte:texte})}).catch(function(){return null;});
+    if(_cRes&&_cRes.ok){var _cD=await _cRes.json();if(_cD&&_cD[0])newComment.id=_cD[0].id;}
   }
   post.comments.push(newComment);
   inp.value='';
@@ -2125,9 +2158,11 @@ async function handleQRCode(data){
   }
   // 2. Si pas trouvé, charger depuis Supabase par ID
   if(!student && studentId && SUPABASE_READY){
-    var {data:profData}=await sb.from('profiles').select('*').eq('id',studentId).single().catch(function(){return{data:null};});
+    var _qpRes=await fetch(SUPABASE_URL+'/rest/v1/profiles?id=eq.'+studentId+'&limit=1',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}}).catch(function(){return null;});
+    var profData=(_qpRes&&_qpRes.ok)?((await _qpRes.json())[0]||null):null;
     if(profData){
-      var {data:insData}=await sb.from('inscriptions').select('*').eq('eleve_id',studentId).catch(function(){return{data:[]};});
+      var _qiRes=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?eleve_id=eq.'+studentId,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}}).catch(function(){return null;});
+      var insData=(_qiRes&&_qiRes.ok)?await _qiRes.json():[];
       var ins=(insData||[]).map(function(i){return{courseId:i.cours_id,packId:i.pack_id,type:i.type,restant:i.seances_restantes,total:i.seances_total,assiste:i.seances_assistees||0,paye:parseFloat(i.montant_paye||0),dbId:i.id};});
       student={id:profData.id,nom:profData.nom,prenom:profData.prenom,email:profData.email,niveau:profData.niveau||'Débutant',photo:profData.photo_url,inscriptions:ins,st:'Actif',montant:ins.reduce(function(a,i){return a+i.paye;},0)};
       STUDENTS.push(student);
@@ -2218,12 +2253,14 @@ async function validateEntry(studentIdx,ci){
     try{
       if(ins.dbId){
         if(ins.type==='illimite'){
-          await sb.from('inscriptions').update({seances_assistees:ins.assiste}).eq('id',ins.dbId);
+          await fetch(SUPABASE_URL+'/rest/v1/inscriptions?id=eq.'+ins.dbId,{method:'PATCH',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'},body:JSON.stringify({seances_assistees:ins.assiste})});
         }else{
-          await sb.from('inscriptions').update({seances_restantes:ins.restant,seances_assistees:(ins.assiste||0)+1}).eq('id',ins.dbId);
+          await fetch(SUPABASE_URL+'/rest/v1/inscriptions?id=eq.'+ins.dbId,{method:'PATCH',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'},body:JSON.stringify({seances_restantes:ins.restant,seances_assistees:(ins.assiste||0)+1})});
         }
       }else{
-        var {data:insData}=await sb.from('inscriptions').select('id').eq('eleve_id',s.id).eq('cours_id',ins.courseId).maybeSingle();
+        var _viRes=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?eleve_id=eq.'+s.id+'&cours_id=eq.'+ins.courseId+'&limit=1',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+        var _viArr=_viRes.ok?await _viRes.json():[];
+        var insData=_viArr[0]||null;
         if(insData){try{await sb.rpc('valider_entree',{p_inscription_id:insData.id});}catch(e){}}
       }
     }catch(e){console.warn('validateEntry:',e);}
@@ -2235,8 +2272,9 @@ async function refreshStudentInscriptions(studentId){
   // Recharge les inscriptions depuis Supabase pour l'eleve
   if(!SUPABASE_READY||!studentId) return;
   try{
-    var {data:ins}=await sb.from('inscriptions').select('*').eq('eleve_id',studentId);
-    if(!ins) return;
+    var _riRes=await fetch(SUPABASE_URL+'/rest/v1/inscriptions?eleve_id=eq.'+studentId,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+    if(!_riRes.ok) return;
+    var ins=await _riRes.json();
     var mapped=(ins||[]).map(function(i){return{courseId:i.cours_id,packId:i.pack_id,type:i.type,restant:i.seances_restantes,total:i.seances_total,assiste:i.seances_assistees||0,paye:parseFloat(i.montant_paye||0),dbId:i.id};});
     // Mettre à jour CURRENT_PROFILE si c'est l'élève connecté
     if(CURRENT_PROFILE&&CURRENT_PROFILE.id===studentId){
@@ -2321,17 +2359,15 @@ async function loadSeances(){
   }).catch(function(){});
 
   // 2. Charger les séances existantes
-  var {data}=await sb.from('seances').select('*')
-    .gte('date',todayStr).lte('date',futurStr).order('date');
-  SEANCES=data||[];
+  var _lsR=await fetch(SUPABASE_URL+'/rest/v1/seances?date=gte.'+todayStr+'&date=lte.'+futurStr+'&order=date',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+  SEANCES=_lsR.ok?await _lsR.json():[];
 
   // 3. Générer les dates manquantes
   await generateSeances();
 
   // 4. Recharger
-  var {data:data2}=await sb.from('seances').select('*')
-    .gte('date',todayStr).lte('date',futurStr).order('date');
-  SEANCES=data2||[];
+  var _ls2R=await fetch(SUPABASE_URL+'/rest/v1/seances?date=gte.'+todayStr+'&date=lte.'+futurStr+'&order=date',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+  SEANCES=_ls2R.ok?await _ls2R.json():[];
   tPage('courses');
 }
 
@@ -2353,8 +2389,8 @@ async function addSeanceManuelle(coursId){
     // Vérifier si cette date existe déjà
     var exists=SEANCES.some(function(s){return s.cours_id===coursId&&s.date===ds;});
     if(exists){toast('Cette date existe déjà','err');return;}
-    var {error}=await sb.from('seances').insert({cours_id:coursId,date:ds,statut:'actif'});
-    if(error){toast('Erreur: '+error.message,'err');return;}
+    var _si=await fetch(SUPABASE_URL+'/rest/v1/seances',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'},body:JSON.stringify({cours_id:coursId,date:ds,statut:'actif'})});
+    if(!_si.ok){var _sit=await _si.text();toast('Erreur: '+_sit,'err');return;}
     toast('Séance ajoutée ✓');
     await loadSeances();
   });
@@ -2389,7 +2425,7 @@ async function toggleSeance(id,currentStatut){
 async function addSeanceNote(id){
   var note=prompt('Note pour cette séance (ex: "Annulé - vacances") :');
   if(note===null) return;
-  await sb.from('seances').update({note:note}).eq('id',id);
+  await fetch(SUPABASE_URL+'/rest/v1/seances?id=eq.'+id,{method:'PATCH',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'},body:JSON.stringify({note:note})}).catch(function(){});
   var s=SEANCES.find(function(x){return x.id===id;});
   if(s) s.note=note;
   tPage('courses');
@@ -2397,8 +2433,8 @@ async function addSeanceNote(id){
 
 async function deleteSeance(id){
   if(!confirm('Supprimer cette séance ?')) return;
-  var {error}=await sb.from('seances').delete().eq('id',id);
-  if(error){toast('Erreur: '+error.message,'err');return;}
+  var _sd=await fetch(SUPABASE_URL+'/rest/v1/seances?id=eq.'+id,{method:'DELETE',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY),'Prefer':'return=minimal'}});
+  if(!_sd.ok){toast('Erreur suppression séance','err');return;}
   SEANCES=SEANCES.filter(function(s){return s.id!==id;});
   toast('Séance supprimée');
   tPage('courses');
@@ -2490,8 +2526,9 @@ async function addStyle(){
 }
 async function removeStyle(i){
   if(SUPABASE_READY){
-    var { data } = await sb.from('styles').select('id').eq('nom',DANCE_STYLES[i]).single();
-    if(data){ var ok=await sbDelete('styles',data.id); if(!ok)return; }
+    var _sdR=await fetch(SUPABASE_URL+'/rest/v1/styles?nom=eq.'+encodeURIComponent(DANCE_STYLES[i]),{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+    var _sdD=_sdR.ok?await _sdR.json():[];
+    if(_sdD[0]){var ok=await sbDelete('styles',_sdD[0].id);if(!ok)return;}
   }
   DANCE_STYLES.splice(i,1);tPage('courses');
 }
@@ -2511,8 +2548,9 @@ async function deleteStyleInline(si, btn){
   if(!nom)return;
   if(!confirm('Supprimer le style "'+nom+'" ?'))return;
   if(SUPABASE_READY){
-    var {data}=await sb.from('styles').select('id').eq('nom',nom).single();
-    if(data){var ok=await sbDelete('styles',data.id);if(!ok)return;}
+    var _dsiR=await fetch(SUPABASE_URL+'/rest/v1/styles?nom=eq.'+encodeURIComponent(nom),{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(RC_TOKEN||SUPABASE_KEY)}});
+    var _dsiD=_dsiR.ok?await _dsiR.json():[];
+    if(_dsiD[0]){var ok=await sbDelete('styles',_dsiD[0].id);if(!ok)return;}
   }
   DANCE_STYLES.splice(si,1);
   // Retirer la ligne du DOM sans fermer la modal

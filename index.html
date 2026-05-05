@@ -576,37 +576,12 @@ var MEDIA_TYPE='image';
 
 var DANCE_STYLES=['Salsa','Contemporary','Hip-hop','Bachata','Jazz','Afrobeat','Breaking','Dancehall','Krump','Modern Jazz'];
 
-var PROFS=[
-  {id:'pr1',prenom:'Sophie',nom:'Martin',photo:'https://i.pravatar.cc/150?img=47',styles:['Salsa','Bachata','Contemporary'],desc:'Professeure certifiée avec 12 ans d\'expérience. Spécialiste des danses latines et de la danse contemporaine. Passionnée par la transmission et l\'expression artistique.'},
-  {id:'pr2',prenom:'Lucas',nom:'Fontaine',photo:'https://i.pravatar.cc/150?img=12',styles:['Hip-hop','Breaking','Krump'],desc:'Ancien danseur professionnel, champion régional de battle Hip-hop. Pédagogie bienveillante et exigeante, adaptée à tous les niveaux.'},
-  {id:'pr3',prenom:'Amara',nom:'Diallo',photo:'https://i.pravatar.cc/150?img=35',styles:['Afrobeat','Dancehall'],desc:'Native de Dakar, Amara apporte l\'énergie et l\'authenticité des rythmes africains. Ses cours sont une véritable invitation au voyage.'},
-];
+var PROFS=[];
+var PACKS=[];
 
-var PACKS=[
-  {id:'p1',nom:'Pack 5 séances',seances:5,prix:90,type:'seances'},
-  {id:'p2',nom:'Pack 10 séances',seances:10,prix:170,type:'seances'},
-  {id:'p3',nom:'Pack 20 séances',seances:20,prix:320,type:'seances'},
-  {id:'p4',nom:'Illimité annuel',seances:null,prix:480,type:'illimite'},
-];
+var COURSES=[];
 
-var COURSES=[
-  {id:'c1',nom:'Salsa Intermédiaire',style:'Salsa',profId:'pr1',jour:'Lundi',heure:'19:00',duree:90,places:12,inscrits:9,niveau:'Intermédiaire',packs:['p1','p2','p3','p4']},
-  {id:'c2',nom:'Contemporary Flow',style:'Contemporary',profId:'pr1',jour:'Mercredi',heure:'18:00',duree:90,places:10,inscrits:10,niveau:'Avancé',packs:['p2','p4']},
-  {id:'c3',nom:'Hip-hop Débutants',style:'Hip-hop',profId:'pr2',jour:'Jeudi',heure:'17:00',duree:60,places:15,inscrits:6,niveau:'Débutant',packs:['p1','p2','p3']},
-  {id:'c4',nom:'Bachata Sensual',style:'Bachata',profId:'pr1',jour:'Vendredi',heure:'20:00',duree:90,places:8,inscrits:5,niveau:'Intermédiaire',packs:['p2','p4']},
-  {id:'c5',nom:'Afrobeat Fusion',style:'Afrobeat',profId:'pr3',jour:'Samedi',heure:'11:00',duree:60,places:12,inscrits:7,niveau:'Tous niveaux',packs:['p1','p2','p3','p4']},
-];
-
-var STUDENTS=[
-  {id:'RC-MD-001',nom:'Dupont',prenom:'Marie',email:'marie@rc.fr',tel:'+33 6 12 34 56 78',dob:'1998-05-12',niveau:'Intermédiaire',photo:'https://i.pravatar.cc/150?img=48',
-   inscriptions:[{courseId:'c1',packId:'p2',type:'seances',restant:8,total:10,paye:170},{courseId:'c3',packId:'p4',type:'illimite',assiste:14,paye:480}],st:'Actif',montant:650},
-  {id:'RC-JL-002',nom:'Lambert',prenom:'Julie',email:'julie@gmail.com',tel:'+33 6 22 33 44 55',dob:'2001-11-03',niveau:'Débutant',photo:'https://i.pravatar.cc/150?img=32',
-   inscriptions:[{courseId:'c3',packId:'p1',type:'seances',restant:4,total:5,paye:90}],st:'Actif',montant:90},
-  {id:'RC-PR-003',nom:'Ricard',prenom:'Paul',email:'paul@mail.com',tel:'+33 6 33 44 55 66',dob:'1995-08-19',niveau:'Intermédiaire',photo:null,
-   inscriptions:[{courseId:'c1',packId:'p2',type:'seances',restant:0,total:10,paye:170}],st:'Expiré',montant:170},
-  {id:'RC-EB-004',nom:'Blanc',prenom:'Emma',email:'emma@gmail.com',tel:'+33 6 44 55 66 77',dob:'2003-02-28',niveau:'Avancé',photo:'https://i.pravatar.cc/150?img=25',
-   inscriptions:[{courseId:'c2',packId:'p4',type:'illimite',assiste:22,paye:480},{courseId:'c4',packId:'p2',type:'seances',restant:6,total:10,paye:170}],st:'Actif',montant:650},
-];
+var STUDENTS=[];
 
 var PENDING_ACCOUNTS=[];
 
